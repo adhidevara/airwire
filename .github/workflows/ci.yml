@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  receiver:
+    name: Receiver tests (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: receiver
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install libopus
+        run: sudo apt-get update && sudo apt-get install -y libopus0
+      - name: Install test dependencies
+        run: pip install numpy pytest
+      - name: Run tests
+        run: python -m pytest -q
+
+  android:
+    name: Android build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build APK and run unit tests
+        run: ./gradlew assembleDebug testDebugUnitTest --console=plain
+      - uses: actions/upload-artifact@v4
+        with:
+          name: airwire-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk

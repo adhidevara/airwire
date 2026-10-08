@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Airwire logo">
+  <title>Airwire</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1E293B"/>
+      <stop offset="1" stop-color="#0B1120"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#BFDBFE"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="wave" gradientUnits="userSpaceOnUse" x1="340" y1="0" x2="460" y2="0">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <g transform="rotate(-40 256 256)">
+    <!-- 3.5 mm plug: tip, ring, sleeve -->
+    <path d="M88 238H72Q48 238 48 256T72 274H88Z" fill="url(#metal)"/>
+    <rect x="96" y="238" width="28" height="36" rx="3" fill="url(#metal)"/>
+    <rect x="132" y="236" width="48" height="40" rx="4" fill="url(#metal)"/>
+    <!-- housing + strain relief -->
+    <rect x="180" y="214" width="112" height="84" rx="18" fill="#E2E8F0"/>
+    <rect x="208" y="214" width="8" height="84" fill="#CBD5E1"/>
+    <rect x="224" y="214" width="8" height="84" fill="#CBD5E1"/>
+    <path d="M292 232L332 245V267L292 280Z" fill="#CBD5E1"/>
+    <!-- the cable ends; the signal carries on through the air -->
+    <g fill="none" stroke="url(#wave)" stroke-width="18" stroke-linecap="round">
+      <path d="M332 256H350"/>
+      <path d="M385.7 227.7A44 44 0 0 1 385.7 284.3"/>
+      <path d="M413.3 204.6A80 80 0 0 1 413.3 307.4" opacity=".7"/>
+      <path d="M440.9 181.4A116 116 0 0 1 440.9 330.6" opacity=".4"/>
+    </g>
+  </g>
+</svg>

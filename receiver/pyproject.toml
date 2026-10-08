@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airwire"
+version = "0.1.0"
+description = "Airwire receiver: play your Android phone's audio on your PC over Wi-Fi (Opus over UDP)"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "sounddevice>=0.5", "pyogg==0.6.14a1"]
+
+[project.scripts]
+airwire = "airwire.__main__:main"
+
+[tool.setuptools]
+packages = ["airwire"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

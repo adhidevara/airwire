@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="Airwire: the audio cable, minus the cable">
+  <title>Airwire: the audio cable, minus the cable</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111C33"/>
+      <stop offset="1" stop-color="#070B16"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.28" cy="0.5" r="0.45">
+      <stop offset="0" stop-color="#2563EB" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#BFDBFE"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="wave" gradientUnits="userSpaceOnUse" x1="340" y1="0" x2="460" y2="0">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#BFDBFE"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+
+  <!-- faint concentric waves behind the mark -->
+  <g fill="none" stroke="#3B82F6" stroke-width="2">
+    <circle cx="330" cy="320" r="170" opacity=".16"/>
+    <circle cx="330" cy="320" r="225" opacity=".10"/>
+    <circle cx="330" cy="320" r="285" opacity=".06"/>
+  </g>
+
+  <!-- mark (same geometry as logo.svg) -->
+  <g transform="translate(330 320) scale(0.62) translate(-256 -256)">
+    <g transform="rotate(-40 256 256)">
+      <path d="M88 238H72Q48 238 48 256T72 274H88Z" fill="url(#metal)"/>
+      <rect x="96" y="238" width="28" height="36" rx="3" fill="url(#metal)"/>
+      <rect x="132" y="236" width="48" height="40" rx="4" fill="url(#metal)"/>
+      <rect x="180" y="214" width="112" height="84" rx="18" fill="#E2E8F0"/>
+      <rect x="208" y="214" width="8" height="84" fill="#CBD5E1"/>
+      <rect x="224" y="214" width="8" height="84" fill="#CBD5E1"/>
+      <path d="M292 232L332 245V267L292 280Z" fill="#CBD5E1"/>
+      <g fill="none" stroke="url(#wave)" stroke-width="18" stroke-linecap="round">
+      <path d="M332 256H350"/>
+      <path d="M385.7 227.7A44 44 0 0 1 385.7 284.3"/>
+      <path d="M413.3 204.6A80 80 0 0 1 413.3 307.4" opacity=".7"/>
+      <path d="M440.9 181.4A116 116 0 0 1 440.9 330.6" opacity=".4"/>
+    </g>
+    </g>
+  </g>
+
+  <g font-family="Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+    <text x="590" y="292" font-size="112" font-weight="800" letter-spacing="-3" fill="url(#word)">Airwire</text>
+    <text x="594" y="352" font-size="34" font-weight="500" fill="#93C5FD">The audio cable, minus the cable.</text>
+    <text x="594" y="404" font-size="23" fill="#94A3B8">Stream your Android phone's audio to any PC on your Wi-Fi.</text>
+
+    <g font-size="19" font-weight="600" fill="#CBD5E1">
+      <rect x="594" y="446" width="138" height="40" rx="20" fill="#1E293B" stroke="#334155"/>
+      <text x="663" y="472" text-anchor="middle">Android 10+</text>
+      <rect x="744" y="446" width="156" height="40" rx="20" fill="#1E293B" stroke="#334155"/>
+      <text x="822" y="472" text-anchor="middle">Opus over UDP</text>
+      <rect x="912" y="446" width="140" height="40" rx="20" fill="#1E293B" stroke="#334155"/>
+      <text x="982" y="472" text-anchor="middle">Low latency</text>
+      <rect x="1064" y="446" width="148" height="40" rx="20" fill="#1E293B" stroke="#334155"/>
+      <text x="1138" y="472" text-anchor="middle">No internet</text>
+    </g>
+  </g>
+</svg>

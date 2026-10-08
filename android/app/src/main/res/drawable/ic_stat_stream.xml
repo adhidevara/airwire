@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification icon: white silhouette. Source artwork: assets/logo.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group android:scaleX="0.052" android:scaleY="0.052" android:translateX="-1.31" android:translateY="-1.31">
+        <group android:rotation="-40" android:pivotX="256" android:pivotY="256">
+            <path android:fillColor="#FFFFFFFF" android:pathData="M88,238H72Q48,238 48,256T72,274H88Z" />
+            <path android:fillColor="#FFFFFFFF" android:pathData="M99,238H121A3,3 0 0 1 124,241V271A3,3 0 0 1 121,274H99A3,3 0 0 1 96,271V241A3,3 0 0 1 99,238Z" />
+            <path android:fillColor="#FFFFFFFF" android:pathData="M136,236H176A4,4 0 0 1 180,240V272A4,4 0 0 1 176,276H136A4,4 0 0 1 132,272V240A4,4 0 0 1 136,236Z" />
+            <path android:fillColor="#FFFFFFFF" android:pathData="M198,214H274A18,18 0 0 1 292,232V280A18,18 0 0 1 274,298H198A18,18 0 0 1 180,280V232A18,18 0 0 1 198,214Z" />
+            <path android:fillColor="#FFFFFFFF" android:pathData="M292,232L332,245V267L292,280Z" />
+            <path android:strokeColor="#FFFFFFFF" android:strokeAlpha="1.0" android:strokeWidth="18" android:strokeLineCap="round" android:pathData="M332,256H350" />
+            <path android:strokeColor="#FFFFFFFF" android:strokeAlpha="1.0" android:strokeWidth="18" android:strokeLineCap="round" android:pathData="M385.7,227.7A44,44 0 0 1 385.7,284.3" />
+            <path android:strokeColor="#FFFFFFFF" android:strokeAlpha="0.7" android:strokeWidth="18" android:strokeLineCap="round" android:pathData="M413.3,204.6A80,80 0 0 1 413.3,307.4" />
+            <path android:strokeColor="#FFFFFFFF" android:strokeAlpha="0.4" android:strokeWidth="18" android:strokeLineCap="round" android:pathData="M440.9,181.4A116,116 0 0 1 440.9,330.6" />
+        </group>
+    </group>
+</vector>
