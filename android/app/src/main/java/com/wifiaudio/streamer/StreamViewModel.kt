@@ -18,6 +18,8 @@ import kotlinx.coroutines.launch
 
 enum class UiAction { USE_MICROPHONE }
 
+enum class AppTab(val label: String) { AUDIO("Audio"), FILES("Files") }
+
 data class UiMessage(
     val text: String,
     val actionLabel: String? = null,
@@ -40,6 +42,13 @@ class StreamViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = SettingsRepository(app)
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
+
+    private val _tab = MutableStateFlow(AppTab.AUDIO)
+    val tab: StateFlow<AppTab> = _tab.asStateFlow()
+
+    fun selectTab(tab: AppTab) {
+        _tab.value = tab
+    }
 
     init {
         viewModelScope.launch {

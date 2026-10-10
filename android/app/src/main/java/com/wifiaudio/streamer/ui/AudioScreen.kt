@@ -1,6 +1,5 @@
 package com.wifiaudio.streamer.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -9,12 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -36,10 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -55,7 +48,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wifiaudio.streamer.AudioSourceType
-import com.wifiaudio.streamer.R
 import com.wifiaudio.streamer.StreamStats
 import com.wifiaudio.streamer.StreamStatus
 import com.wifiaudio.streamer.StreamViewModel
@@ -65,12 +57,12 @@ import com.wifiaudio.streamer.net.DiscoveredReceiver
 import java.util.Locale
 import kotlin.math.roundToInt
 
+/** The Audio tab: source, receiver address, start/stop and quality. */
 @Composable
-fun StreamerScreen(
+fun AudioScreen(
     ui: UiState,
     status: StreamStatus,
     stats: StreamStats,
-    snackbarHostState: SnackbarHostState,
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onSourceChange: (AudioSourceType) -> Unit,
@@ -81,53 +73,26 @@ fun StreamerScreen(
     onToggle: () -> Unit,
 ) {
     val active = status.isActive
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        contentWindowInsets = WindowInsets.safeDrawing, // includes the keyboard
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            BrandHeader()
-            StatusCard(status, stats)
-            Section("Audio source") {
-                SourceSelector(ui.source, enabled = !active, onChange = onSourceChange)
-            }
-            Section("Receiver") {
-                ConnectionPanel(ui, enabled = !active, onHostChange, onPortChange, onScan)
-            }
-            StreamButton(active, onToggle)
-            Section("Quality") {
-                BitrateSlider(ui.bitrateKbps, onBitrateChange)
-            }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        StatusCard(status, stats)
+        Section("Audio source") {
+            SourceSelector(ui.source, enabled = !active, onChange = onSourceChange)
+        }
+        Section("Receiver") {
+            ConnectionPanel(ui, enabled = !active, onHostChange, onPortChange, onScan)
+        }
+        StreamButton(active, onToggle)
+        Section("Quality") {
+            BitrateSlider(ui.bitrateKbps, onBitrateChange)
         }
     }
     ui.found?.let { ScanResultsDialog(it, ui.port, onPickReceiver, onDismissScan) }
-}
-
-@Composable
-private fun BrandHeader() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Image(
-            painter = painterResource(R.drawable.ic_airwire_logo),
-            contentDescription = null,
-            modifier = Modifier.size(44.dp),
-        )
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text("Airwire", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(
-                "The audio cable, minus the cable.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
 }
 
 @Composable
@@ -198,7 +163,7 @@ private fun receiverLine(stats: StreamStats): String =
     }
 
 @Composable
-private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
         Card(

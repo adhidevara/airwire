@@ -1,6 +1,6 @@
-# Wi-Fi Audio Wire Protocol (v1)
+# Airwire Wire Protocol (v1)
 
-Transport: UDP. One port (default **50005**) carries every packet type, in both directions.
+Audio transport: UDP. One port (default **50005**) carries every audio packet type, in both directions. File transfer uses TCP on the same port number (see the last section).
 All integers are **big-endian**. Strings are UTF-8 and fill the rest of the datagram (no length prefix, max 64 bytes).
 
 ## Common header (4 bytes)
@@ -94,3 +94,31 @@ The sender should show the stats it receives in PING.
 1. The redundant copy carried by packet `seq+1`.
 2. Opus in-band FEC (`decode_fec=1` on packet `seq+1`). This only helps when the encoder used SILK/hybrid.
 3. Opus packet-loss concealment (`opus_decode(NULL)`).
+
+## File transfer (HTTP over TCP)
+
+The receiver also listens on **TCP** at the same port number (default 50005) and serves a
+small HTTP/1.0 API under `/api/v1`. Bodies are JSON unless noted.
+
+| Method & path | Auth | Body / query | Response |
+|---|---|---|---|
+| `POST /api/v1/pair` | – | `{"code": "123456", "device": "Pixel 8"}` | `200 {"token", "name"}`, `403` wrong code, `429` after 5 wrong codes in 60 s |
+| `GET /api/v1/hello` | ✓ | – | `200 {"name", "device"}` |
+| `PUT /api/v1/files/<url-encoded name>` | ✓ | raw bytes, `Content-Length` required | `201 {"name", "size", "sha256"}` (`name` = name saved on the PC) |
+| `GET /api/v1/outbox?since=<v>&wait=<s>` | ✓ | long-poll, `wait` ≤ 30 | `200 {"version", "files": [{"id", "name", "size", "sha256"}]}` |
+| `GET /api/v1/outbox/<id>` | ✓ | – | raw bytes; headers `X-Airwire-Name` (url-encoded), `X-Airwire-Sha256` |
+| `DELETE /api/v1/outbox/<id>` | ✓ | – | `204`; the phone sends this after saving, which removes the file from the outbox |
+
+- **Auth:** `Authorization: Bearer <token>`. A missing or revoked token returns `401`; the
+  phone then forgets the pairing.
+- **Pairing:** the 6-digit code is shown in the receiver window. The PC stores only SHA-256
+  hashes of tokens. *Reset pairing* issues a new code and revokes every token.
+- **Phone → PC:** the receiver sanitises the file name (no paths, no reserved Windows
+  names), never overwrites (`name (1).ext`), streams to a temporary `.part` file, and
+  deletes it if the upload is cut short. The phone compares the returned `sha256` with its
+  own.
+- **PC → phone:** files queued on the PC appear in the outbox. The phone long-polls
+  `outbox` (returning as soon as `version` changes), downloads each file, verifies
+  `X-Airwire-Sha256`, saves it to `Download/Airwire`, then sends `DELETE`. A file whose
+  download failed stays in the outbox and is retried on the next poll.
+- Traffic is not encrypted; it is meant for a trusted local network.

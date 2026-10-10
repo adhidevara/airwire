@@ -35,6 +35,10 @@ jaringan lokal.
   notifikasi dan tombol Stop.
 - **Ringan.** Receiver memakai sekitar 3% dari satu core CPU dan sekitar 50 MB RAM.
 - **Bitrate 64–192 kbps**, bisa diubah langsung lewat slider.
+- **Transfer file dua arah.**
+  - HP → PC: kirim foto, video, atau dokumen, atau lewat *Share → Airwire* dari app mana pun.
+  - PC → HP: kirim file dari window receiver.
+  - Pairing cukup sekali dengan kode 6 digit, dan setiap file diverifikasi dengan SHA-256.
 
 ## Cara pakai singkat
 
@@ -57,7 +61,8 @@ Volume dan device terakhir disimpan di `%APPDATA%\Airwire\settings.json`.
 
 Opsi CLI: `--list-devices`, `--device "nama"`, `--volume 70`, `--headless`, `--port`, `--name`.
 
-**Windows Firewall:** izinkan Python di jaringan **Private** saat diminta. Kalau profil
+**Windows Firewall:** izinkan Python di jaringan **Private** saat diminta. Port yang
+dipakai adalah 50005: UDP untuk audio dan TCP untuk file. Kalau profil
 Wi-Fi Anda "Public", ubah ke Private atau buat rule dari PowerShell Administrator:
 
 ```bash
@@ -92,6 +97,18 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 3. Setujui dialog rekam layar. Android memintanya di setiap sesi. Jika ditolak, app
    menawarkan pindah ke mikrofon.
 4. Putar musik di HP; suaranya keluar di laptop. Volume HP boleh diturunkan sampai 0.
+
+### 4. Kirim file
+
+1. Di app, buka tab **Files** dan masukkan kode pairing 6 digit yang tampil di window
+   receiver. Cukup sekali untuk setiap HP.
+2. **HP → PC:** tap **Send files to PC**, atau share file dari app mana pun lalu pilih
+   **Airwire**. File tersimpan di `Downloads\Airwire` di PC.
+3. **PC → HP:** di window receiver klik **Send files to phone…**. HP mengunduhnya selama
+   Airwire terbuka atau sedang streaming. File tersimpan di `Download/Airwire` di HP.
+4. Transfer file memakai HTTP biasa (tidak terenkripsi) di jaringan lokal, dan hanya
+   HP yang sudah paired yang bisa mengirim atau menerima file. Gunakan di jaringan yang
+   Anda percaya. Tombol **Reset pairing** mencabut akses semua HP sekaligus.
 
 ## Latency
 

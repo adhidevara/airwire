@@ -6,10 +6,12 @@ import json
 import logging
 import os
 import socket
+import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import protocol as proto
+from .files import FileService, Pairing, default_files_dir
 from .jitter_buffer import JitterBuffer
 from .net import ReceiverServer
 from .player import AudioPlayer, list_output_devices
@@ -20,10 +22,17 @@ log = logging.getLogger(__name__)
 SOURCE_LABELS = {proto.SOURCE_INTERNAL: "Internal audio", proto.SOURCE_MIC: "Microphone"}
 
 
+_SETTINGS_LOCK = threading.Lock()
+
+
 @dataclass
 class Settings:
     volume: int = 80
     device_name: str = ""
+    files_dir: str = ""
+    pair_code: str = ""
+    # sha256(token) -> {"device", "paired_at"}; see files.Pairing
+    paired_devices: dict = field(default_factory=dict)
 
     @staticmethod
     def path() -> Path:
@@ -39,12 +48,16 @@ class Settings:
             return cls()
 
     def save(self) -> None:
-        try:
-            path = self.path()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
-        except OSError as exc:
-            log.warning("could not save settings: %s", exc)
+        with _SETTINGS_LOCK:
+            try:
+                path = self.path()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
+            except OSError as exc:
+                log.warning("could not save settings: %s", exc)
+
+    def resolved_files_dir(self) -> Path:
+        return Path(self.files_dir) if self.files_dir else default_files_dir()
 
 
 @dataclass
@@ -93,19 +106,46 @@ def local_ipv4_addresses() -> list[str]:
 
 class ReceiverApp:
     def __init__(self, port: int = proto.DEFAULT_PORT, host: str = "0.0.0.0",
-                 name: str | None = None):
+                 name: str | None = None, settings: Settings | None = None,
+                 enable_files: bool = True):
+        # Only settings loaded from disk are written back; an ad-hoc app (tests,
+        # screenshots) must not overwrite the user's pairing and preferences.
+        self._persist = settings is not None
+        self.settings = settings or Settings()
         self.stats = NetStats()
         self.jitter = JitterBuffer()
         self.server = ReceiverServer(self.jitter, self.stats, port=port, host=host, name=name)
         self.player = AudioPlayer(self.jitter.pop)
+        self.files: FileService | None = None
+        if enable_files:
+            pairing = Pairing(self.settings.pair_code, self.settings.paired_devices,
+                              on_change=self._pairing_changed)
+            self._pairing_changed(pairing)
+            try:
+                # TCP on the same port number as the UDP audio stream.
+                self.files = FileService(self.settings.resolved_files_dir(), pairing,
+                                         host=host, port=self.server.port, name=self.server.name)
+            except OSError:
+                self.server.stop()
+                raise
         self._local_ips = local_ipv4_addresses()
+
+    def _pairing_changed(self, pairing: Pairing) -> None:
+        self.settings.pair_code = pairing.code
+        self.settings.paired_devices = pairing.devices
+        if self._persist:
+            self.settings.save()
 
     def start(self, device: int | None = None) -> None:
         self.server.start()
+        if self.files:
+            self.files.start()
         self.player.start(device)
 
     def stop(self) -> None:
         self.player.stop()
+        if self.files:
+            self.files.stop()
         self.server.stop()
 
     def set_device(self, device: int | None) -> None:

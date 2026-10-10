@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import tkinter as tk
-from tkinter import ttk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
 from .app import ReceiverApp, Settings, Status
+from .files import Transfer
 from .player import list_output_devices
 
 REFRESH_MS = 250
@@ -17,13 +22,38 @@ def _fmt_ms(value: float | None, digits: int = 0) -> str:
     return "–" if value is None else f"{value:.{digits}f} ms"
 
 
+def _fmt_size(n: float) -> str:
+    for unit in ("B", "KB", "MB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} GB"
+
+
+def _open_path(path: Path) -> None:
+    if sys.platform == "win32":
+        os.startfile(path)
+    else:
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(path)])
+
+
+def _transfer_status(t: Transfer) -> str:
+    if t.status == "transferring":
+        return f"{t.progress * 100:.0f} %"
+    if t.status == "queued":
+        return "Waiting for phone" if t.direction == "out" else "Queued"
+    if t.status == "done":
+        return "Received" if t.direction == "in" else "Sent"
+    return "Failed"
+
+
 class ReceiverWindow:
     def __init__(self, root: tk.Tk, app: ReceiverApp, settings: Settings):
         self.root = root
         self.app = app
         self.settings = settings
         root.title("Airwire Receiver")
-        root.minsize(380, 0)
+        root.minsize(760, 0)
         root.resizable(False, False)
         style = ttk.Style(root)
         if "vista" in style.theme_names():
@@ -32,6 +62,7 @@ class ReceiverWindow:
         style.configure("Value.TLabel", font=("Segoe UI", 10))
         style.configure("Key.TLabel", foreground=GREY)
         style.configure("Brand.TLabel", font=("Segoe UI Semibold", 16), foreground=BRAND_BLUE)
+        style.configure("Code.TLabel", font=("Consolas", 22, "bold"), foreground=BRAND_BLUE)
 
         body = ttk.Frame(root, padding=14)
         body.pack(fill="both", expand=True)
@@ -103,8 +134,110 @@ class ReceiverWindow:
         self.output_note.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
         self._on_volume(settings.volume)
 
+        # Files (right column) -----------------------------------------------------
+        body.columnconfigure(1, weight=1)
+        self._build_files_panel(body)
+
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._refresh()
+
+    def _build_files_panel(self, body: ttk.Frame) -> None:
+        panel = ttk.LabelFrame(body, text="Files", padding=(10, 6))
+        panel.grid(row=1, column=1, rowspan=4, sticky="nsew", padx=(12, 0))
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(4, weight=1)
+        self._transfers: dict[str, Transfer] = {}
+        if self.app.files is None:
+            ttk.Label(panel, text="File transfer is disabled (--no-files).",
+                      style="Key.TLabel").grid(row=0, column=0, sticky="w")
+            return
+
+        ttk.Label(panel, text="Pairing code", style="Key.TLabel").grid(row=0, column=0, sticky="w")
+        code_row = ttk.Frame(panel)
+        code_row.grid(row=1, column=0, sticky="ew")
+        code_row.columnconfigure(0, weight=1)
+        self.code_var = tk.StringVar()
+        ttk.Label(code_row, textvariable=self.code_var, style="Code.TLabel").grid(
+            row=0, column=0, sticky="w")
+        ttk.Button(code_row, text="Reset pairing", command=self._reset_pairing).grid(
+            row=0, column=1, sticky="e")
+        self.paired_var = tk.StringVar()
+        ttk.Label(panel, textvariable=self.paired_var, style="Key.TLabel", wraplength=330,
+                  justify="left").grid(row=2, column=0, sticky="w", pady=(0, 8))
+
+        buttons = ttk.Frame(panel)
+        buttons.grid(row=3, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(buttons, text="Send files to phone…", command=self._send_files).pack(side="left")
+        ttk.Button(buttons, text="Open received folder", command=self._open_folder).pack(
+            side="left", padx=(6, 0))
+
+        tree = ttk.Treeview(panel, columns=("dir", "size", "status"), height=9,
+                            selectmode="browse")
+        tree.heading("#0", text="File", anchor="w")
+        tree.heading("dir", text="")
+        tree.heading("size", text="Size", anchor="e")
+        tree.heading("status", text="Status", anchor="w")
+        tree.column("#0", width=170, stretch=True)
+        tree.column("dir", width=28, anchor="center", stretch=False)
+        tree.column("size", width=70, anchor="e", stretch=False)
+        tree.column("status", width=110, anchor="w", stretch=False)
+        tree.grid(row=4, column=0, sticky="nsew")
+        tree.bind("<Double-1>", self._open_selected)
+        self.files_tree = tree
+
+        ttk.Label(panel, text=f"Received files are saved to {self.app.files.files_dir}",
+                  style="Key.TLabel", wraplength=330, justify="left").grid(
+            row=5, column=0, sticky="w", pady=(6, 0))
+
+    def _reset_pairing(self) -> None:
+        if messagebox.askyesno("Reset pairing", "Paired phones will need the new code to send "
+                                                "or receive files. Reset now?", parent=self.root):
+            self.app.files.pairing.reset()
+
+    def _send_files(self) -> None:
+        paths = filedialog.askopenfilenames(parent=self.root, title="Send files to phone")
+        if not paths:
+            return
+        self.app.files.send_to_phone(list(paths))
+        if not self.app.files.pairing.devices:
+            messagebox.showinfo("Pair your phone", "The files are waiting here. On the phone, "
+                                "open Airwire, go to Files and enter the pairing code; they "
+                                "download automatically.", parent=self.root)
+
+    def _open_folder(self) -> None:
+        folder = self.app.files.files_dir
+        folder.mkdir(parents=True, exist_ok=True)
+        _open_path(folder)
+
+    def _open_selected(self, _event=None) -> None:
+        sel = self.files_tree.selection()
+        t = self._transfers.get(sel[0]) if sel else None
+        if t and t.status == "done" and t.path and Path(t.path).exists():
+            _open_path(Path(t.path))
+
+    def _render_files(self) -> None:
+        files = self.app.files
+        if files is None:
+            return
+        code = files.pairing.code
+        self.code_var.set(f"{code[:3]} {code[3:]}")
+        names = files.pairing.device_names()
+        self.paired_var.set(("Paired: " + ", ".join(names)) if names else
+                            "No phone paired yet. In the Airwire app open Files and enter "
+                            "this code.")
+        tree = self.files_tree
+        current = files.transfers()
+        self._transfers = {t.id: t for t in current}
+        for t in current:
+            values = ("↓" if t.direction == "in" else "↑", _fmt_size(t.size),
+                      _transfer_status(t))
+            if tree.exists(t.id):
+                tree.item(t.id, text=t.name, values=values)
+            else:
+                tree.insert("", 0, iid=t.id, text=t.name, values=values)
+        for iid in tree.get_children():
+            if iid not in self._transfers:
+                tree.delete(iid)
 
     def _on_device(self, _event=None) -> None:
         name = self.device_var.get()
@@ -123,6 +256,7 @@ class ReceiverWindow:
 
     def _refresh(self) -> None:
         self._render(self.app.status())
+        self._render_files()
         self.root.after(REFRESH_MS, self._refresh)
 
     def _render(self, s: Status) -> None:

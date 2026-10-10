@@ -37,6 +37,9 @@ network.
   notification and a Stop button.
 - **Light on resources.** About 3% of one CPU core and 50 MB of RAM on the receiver.
 - **Bitrate from 64 to 192 kbps**, changed live from a slider.
+- **File transfer, both ways.** Send photos, videos, and documents from the phone to the
+  PC (or *Share → Airwire* from any app), and push files from the PC to the phone. Pair
+  once with a 6-digit code; transfers are checked with SHA-256.
 
 ## Screenshots
 
@@ -81,7 +84,8 @@ address, the connected phone, latency, jitter, and packet loss, and lets you cho
 output device and volume.
 
 > **Firewall:** allow Python on *Private* networks when Windows asks. If your Wi-Fi profile
-> is *Public*, either switch it to Private or allow UDP 50005 inbound.
+> is *Public*, either switch it to Private or allow port 50005 inbound (UDP for audio, TCP
+> for files).
 
 ### 2. Android app
 
@@ -110,6 +114,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
    asks again for every session.
 4. Play something on the phone. It comes out of your PC.
 
+### 4. Send files
+
+1. In the app, open the **Files** tab and enter the 6-digit pairing code shown in the
+   receiver window. You only do this once per phone.
+2. **Phone → PC:** tap **Send files to PC**, or share files from any app and pick
+   **Airwire**. They are saved to `Downloads\Airwire` on the PC.
+3. **PC → phone:** in the receiver window click **Send files to phone…**. The phone
+   downloads them while Airwire is open or streaming and saves them to `Download/Airwire`.
+
 ## Latency
 
 | Stage | Typical |
@@ -134,7 +147,7 @@ cd receiver
 python tools/fake_sender.py --discover                 # find receivers
 python tools/fake_sender.py --loss 5 --jitter 15       # tone with 5% loss and 0-15 ms jitter
 python tools/fake_sender.py --wav song_48k.wav --burst 3
-python -m pytest                                       # 46 unit + integration tests
+python -m pytest                                       # 65 unit + integration tests
 ```
 
 ## Project layout
@@ -143,7 +156,7 @@ python -m pytest                                       # 46 unit + integration t
 android/    Kotlin + Jetpack Compose app, libopus through JNI (NDK/CMake)
 receiver/   Python receiver: Tkinter UI, jitter buffer, ctypes libopus binding, tests
 assets/     Logo and banner
-PROTOCOL.md UDP wire format shared by both sides
+PROTOCOL.md Wire formats: UDP audio and the HTTP file API
 ```
 
 ## FAQ
@@ -158,6 +171,10 @@ Rerouting audio away from the speaker requires a system-only permission (`REMOTE
 
 **More than one phone?** The receiver locks onto one sender at a time. A second phone is
 accepted once the first one stops.
+
+**Is file transfer encrypted?** No. Files travel as plain HTTP on your local network, and
+only paired phones can send or receive them. Use it on networks you trust, not on public
+Wi-Fi. *Reset pairing* in the receiver window revokes every phone at once.
 
 ## License
 

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Airwire</string>
+    <string name="share_to_pc">Send to PC</string>
 </resources>

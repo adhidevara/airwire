@@ -1,10 +1,12 @@
 package com.wifiaudio.streamer
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -19,11 +21,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.wifiaudio.streamer.files.FileTransfer
+import com.wifiaudio.streamer.files.FileTransfers
+import com.wifiaudio.streamer.files.PairState
 import com.wifiaudio.streamer.net.Protocol
 import com.wifiaudio.streamer.service.StreamingService
-import com.wifiaudio.streamer.ui.StreamerScreen
+import com.wifiaudio.streamer.ui.AirwireApp
 import com.wifiaudio.streamer.ui.AirwireTheme
+import com.wifiaudio.streamer.ui.AudioScreen
+import com.wifiaudio.streamer.ui.FilesScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -39,6 +47,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     private val projectionLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val data = result.data
@@ -53,14 +64,24 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private val filePicker =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isNotEmpty()) FileTransfers.send(uris)
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        FileTransfers.init(this)
+        if (savedInstanceState == null) handleShare(intent)
         setContent {
             AirwireTheme {
                 val ui by vm.ui.collectAsStateWithLifecycle()
+                val tab by vm.tab.collectAsStateWithLifecycle()
                 val status by StreamController.status.collectAsStateWithLifecycle()
                 val stats by StreamController.stats.collectAsStateWithLifecycle()
+                val pairState by FileTransfers.pairState.collectAsStateWithLifecycle()
+                val transfers by FileTransfers.transfers.collectAsStateWithLifecycle()
                 val snackbar = remember { SnackbarHostState() }
 
                 LaunchedEffect(ui.message?.id) {
@@ -77,23 +98,107 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                StreamerScreen(
-                    ui = ui,
-                    status = status,
-                    stats = stats,
+                AirwireApp(
+                    tab = tab,
+                    onTabChange = vm::selectTab,
                     snackbarHostState = snackbar,
-                    onHostChange = vm::setHost,
-                    onPortChange = vm::setPort,
-                    onSourceChange = vm::setSource,
-                    onBitrateChange = vm::setBitrate,
-                    onScan = vm::scan,
-                    onPickReceiver = vm::pickReceiver,
-                    onDismissScan = vm::dismissScan,
-                    onToggle = ::onToggle,
+                    audio = {
+                        AudioScreen(
+                            ui = ui,
+                            status = status,
+                            stats = stats,
+                            onHostChange = vm::setHost,
+                            onPortChange = vm::setPort,
+                            onSourceChange = vm::setSource,
+                            onBitrateChange = vm::setBitrate,
+                            onScan = vm::scan,
+                            onPickReceiver = vm::pickReceiver,
+                            onDismissScan = vm::dismissScan,
+                            onToggle = ::onToggle,
+                        )
+                    },
+                    files = {
+                        FilesScreen(
+                            pairState = pairState,
+                            transfers = transfers,
+                            onPair = { code ->
+                                askForNotifications()
+                                FileTransfers.pair(code)
+                            },
+                            onUnpair = FileTransfers::unpair,
+                            onPickFiles = ::pickFiles,
+                            onOpen = ::openFile,
+                            onClearFinished = FileTransfers::clearFinished,
+                            onGoToAudio = { vm.selectTab(AppTab.AUDIO) },
+                        )
+                    },
                 )
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleShare(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        FileTransfers.setVisible(true)
+    }
+
+    override fun onStop() {
+        FileTransfers.setVisible(false)
+        super.onStop()
+    }
+
+    // ---- files ------------------------------------------------------------------
+
+    /** "Share → Airwire" from another app. */
+    private fun handleShare(intent: Intent?) {
+        val uris: List<Uri> = when (intent?.action) {
+            Intent.ACTION_SEND ->
+                listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
+            Intent.ACTION_SEND_MULTIPLE ->
+                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+            else -> return
+        }
+        vm.selectTab(AppTab.FILES)
+        if (uris.isEmpty()) {
+            vm.showMessage("Only files can be sent to the PC.")
+            return
+        }
+        FileTransfers.send(uris)
+        if (FileTransfers.pairState.value !is PairState.Paired) {
+            vm.showMessage("Pair with your PC to send ${if (uris.size == 1) "this file" else "these files"}.")
+        }
+    }
+
+    private fun pickFiles() {
+        askForNotifications()
+        filePicker.launch(arrayOf("*/*"))
+    }
+
+    private fun openFile(transfer: FileTransfer) {
+        val uri = transfer.uri ?: return
+        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, transfer.mime)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            startActivity(view)
+        } catch (e: ActivityNotFoundException) {
+            vm.showMessage("No app on this phone can open ${transfer.name}.")
+        }
+    }
+
+    private fun askForNotifications() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    // ---- audio ------------------------------------------------------------------
 
     private fun onToggle() {
         if (StreamController.status.value.isActive) {

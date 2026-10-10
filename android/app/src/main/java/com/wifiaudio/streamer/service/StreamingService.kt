@@ -20,7 +20,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
-import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -32,6 +31,8 @@ import com.wifiaudio.streamer.StreamController
 import com.wifiaudio.streamer.StreamStats
 import com.wifiaudio.streamer.StreamStatus
 import com.wifiaudio.streamer.audio.AudioCapture
+import com.wifiaudio.streamer.deviceName
+import com.wifiaudio.streamer.files.FileTransfers
 import com.wifiaudio.streamer.net.UdpStreamer
 
 /**
@@ -105,6 +106,9 @@ class StreamingService : Service() {
                 onFatal = { message -> main.post { shutdown(message) } },
             ).also { it.start() }
             StreamController.setStatus(StreamStatus.Streaming(target, source))
+            // Files from the PC keep arriving while streaming, even with the app closed.
+            FileTransfers.init(this)
+            FileTransfers.setStreaming(true)
         } catch (e: Exception) {
             shutdown(e.message ?: e.javaClass.simpleName)
         }
@@ -150,6 +154,7 @@ class StreamingService : Service() {
             runCatching { it.stop() }
         }
         releaseLocks()
+        FileTransfers.setStreaming(false)
         StreamController.setStats(StreamStats())
         StreamController.setStatus(if (error != null) StreamStatus.Failed(error) else StreamStatus.Idle)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -188,10 +193,6 @@ class StreamingService : Service() {
     private fun hasRecordPermission() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
-
-    private fun deviceName(): String =
-        Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)
-            ?.takeIf { it.isNotBlank() } ?: Build.MODEL
 
     private fun buildNotification(source: AudioSourceType, target: String): Notification {
         val manager = getSystemService(NotificationManager::class.java)!!

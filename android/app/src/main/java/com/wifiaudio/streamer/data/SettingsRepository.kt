@@ -17,6 +17,9 @@ import java.io.IOException
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "stream_settings")
 
+/** Token from pairing with the PC's file service (see files.FileTransfers). */
+data class FilePairing(val token: String, val pcName: String)
+
 data class StreamSettings(
     val host: String = "",
     val port: Int = Protocol.DEFAULT_PORT,
@@ -39,6 +42,26 @@ class SettingsRepository(context: Context) {
             )
         }
 
+    val pairing: Flow<FilePairing?> = store.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { p ->
+            p[FILES_TOKEN]?.takeIf { it.isNotBlank() }?.let { FilePairing(it, p[FILES_PC_NAME].orEmpty()) }
+        }
+
+    suspend fun savePairing(pairing: FilePairing) {
+        store.edit { p ->
+            p[FILES_TOKEN] = pairing.token
+            p[FILES_PC_NAME] = pairing.pcName
+        }
+    }
+
+    suspend fun clearPairing() {
+        store.edit { p ->
+            p.remove(FILES_TOKEN)
+            p.remove(FILES_PC_NAME)
+        }
+    }
+
     suspend fun save(s: StreamSettings) {
         store.edit { p ->
             p[HOST] = s.host
@@ -53,5 +76,7 @@ class SettingsRepository(context: Context) {
         val PORT = intPreferencesKey("port")
         val SOURCE = stringPreferencesKey("source")
         val BITRATE = intPreferencesKey("bitrate_kbps")
+        val FILES_TOKEN = stringPreferencesKey("files_token")
+        val FILES_PC_NAME = stringPreferencesKey("files_pc_name")
     }
 }

@@ -23,6 +23,12 @@ def _print_devices() -> None:
 def _run_headless(app: ReceiverApp) -> None:
     print(f"Listening on {app.server.host}:{app.server.port}  (this PC: "
           f"{', '.join(app.status().local_ips) or 'n/a'})  Ctrl+C to quit")
+    if app.files:
+        app.files.on_event = lambda t: print(
+            f"file {'from' if t.direction == 'in' else 'to'} phone: {t.name} {t.status}"
+            + (f" ({t.error})" if t.error else ""), flush=True)
+        print(f"File transfer: pairing code {app.files.pairing.code}, saving to "
+              f"{app.files.files_dir}", flush=True)
     while True:
         time.sleep(1)
         s = app.status()
@@ -46,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--volume", type=int, help="0-100 (default: last used)")
     parser.add_argument("--name", default=socket.gethostname(), help="name shown on the phone")
     parser.add_argument("--headless", action="store_true", help="no window, print stats")
+    parser.add_argument("--files-dir", help="where files from the phone are saved "
+                                             "(default: Downloads/Airwire)")
+    parser.add_argument("--no-files", action="store_true", help="disable file transfer")
     parser.add_argument("--list-devices", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -72,10 +81,14 @@ def main(argv: list[str] | None = None) -> int:
         _print_devices()
         return 2
 
+    if args.files_dir:
+        settings.files_dir = args.files_dir
     try:
-        app = ReceiverApp(port=args.port, host=args.bind, name=args.name)
+        app = ReceiverApp(port=args.port, host=args.bind, name=args.name, settings=settings,
+                          enable_files=not args.no_files)
     except OSError as exc:
-        print(f"Cannot listen on UDP port {args.port}: {exc}", file=sys.stderr)
+        print(f"Cannot listen on port {args.port} (UDP audio / TCP files): {exc}",
+              file=sys.stderr)
         return 1
     app.player.volume = settings.volume / 100
     app.start(device)
