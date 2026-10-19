@@ -21,7 +21,8 @@ def _print_devices() -> None:
 
 
 def _run_headless(app: ReceiverApp) -> None:
-    print(f"Listening on {app.server.host}:{app.server.port}  (this PC: "
+    host_label = "this Mac: " if sys.platform == "darwin" else "this PC: "
+    print(f"Listening on {app.server.host}:{app.server.port}  ({host_label}"
           f"{', '.join(app.status().local_ips) or 'n/a'})  Ctrl+C to quit")
     if app.files:
         app.files.on_event = lambda t: print(

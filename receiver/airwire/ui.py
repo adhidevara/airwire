@@ -56,13 +56,21 @@ class ReceiverWindow:
         root.minsize(760, 0)
         root.resizable(False, False)
         style = ttk.Style(root)
-        if "vista" in style.theme_names():
-            style.theme_use("vista")
-        style.configure("Big.TLabel", font=("Segoe UI Semibold", 13))
-        style.configure("Value.TLabel", font=("Segoe UI", 10))
-        style.configure("Key.TLabel", foreground=GREY)
-        style.configure("Brand.TLabel", font=("Segoe UI Semibold", 16), foreground=BRAND_BLUE)
-        style.configure("Code.TLabel", font=("Consolas", 22, "bold"), foreground=BRAND_BLUE)
+        if sys.platform == "darwin" and "aqua" in style.theme_names():
+            style.theme_use("aqua")
+            style.configure("Big.TLabel", font=("Helvetica Neue", 13, "bold"))
+            style.configure("Value.TLabel", font=("Helvetica Neue", 11))
+            style.configure("Key.TLabel", foreground=GREY, font=("Helvetica Neue", 10))
+            style.configure("Brand.TLabel", font=("Helvetica Neue", 16, "bold"), foreground=BRAND_BLUE)
+            style.configure("Code.TLabel", font=("Menlo", 22, "bold"), foreground=BRAND_BLUE)
+        else:
+            if "vista" in style.theme_names():
+                style.theme_use("vista")
+            style.configure("Big.TLabel", font=("Segoe UI Semibold", 13))
+            style.configure("Value.TLabel", font=("Segoe UI", 10))
+            style.configure("Key.TLabel", foreground=GREY)
+            style.configure("Brand.TLabel", font=("Segoe UI Semibold", 16), foreground=BRAND_BLUE)
+            style.configure("Code.TLabel", font=("Consolas", 22, "bold"), foreground=BRAND_BLUE)
 
         body = ttk.Frame(root, padding=14)
         body.pack(fill="both", expand=True)
@@ -139,6 +147,9 @@ class ReceiverWindow:
         self._build_files_panel(body)
 
         root.protocol("WM_DELETE_WINDOW", self.close)
+        if sys.platform == "darwin":
+            root.bind("<Command-q>", lambda _e: self.close())
+            root.bind("<Command-w>", lambda _e: self.close())
         self._refresh()
 
     def _build_files_panel(self, body: ttk.Frame) -> None:
@@ -261,7 +272,8 @@ class ReceiverWindow:
 
     def _render(self, s: Status) -> None:
         self.listen_var.set(f"Listening on {s.listening}")
-        self.ips_var.set("This PC: " + (", ".join(s.local_ips) or "no LAN address found"))
+        host_prefix = "This Mac: " if sys.platform == "darwin" else "This PC: "
+        self.ips_var.set(host_prefix + (", ".join(s.local_ips) or "no LAN address found"))
         if s.connected and s.playing:
             self.state_label.configure(text="● Streaming", foreground=GREEN)
         elif s.connected:

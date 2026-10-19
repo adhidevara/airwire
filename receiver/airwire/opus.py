@@ -49,6 +49,16 @@ def _candidates() -> list[str]:
         paths.append(env)
     lib_name = _LIB_NAMES.get(sys.platform, "libopus.so.0")
     paths.append(str(Path(__file__).resolve().parent.parent / "lib" / lib_name))
+    # If packaged via PyInstaller (.app bundle)
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        paths.append(os.path.join(sys._MEIPASS, lib_name))
+        paths.append(os.path.join(sys._MEIPASS, "Frameworks", lib_name))
+    # Homebrew / macOS library paths
+    if sys.platform == "darwin":
+        paths.append(f"/usr/local/lib/{lib_name}")
+        paths.append(f"/usr/local/opt/opus/lib/{lib_name}")
+        paths.append(f"/opt/homebrew/lib/{lib_name}")
+        paths.append(f"/opt/homebrew/opt/opus/lib/{lib_name}")
     spec = importlib.util.find_spec("pyogg")
     if spec and spec.submodule_search_locations:
         for loc in spec.submodule_search_locations:
@@ -75,9 +85,13 @@ def load_libopus() -> ctypes.CDLL:
         except OSError as exc:
             errors.append(f"{path}: {exc}")
     else:
+        hint = (
+            "Install `brew install opus` or place libopus.dylib in receiver/lib/"
+            if sys.platform == "darwin"
+            else "Install `pyogg` (bundles opus.dll on Windows) or place opus.dll in receiver/lib/"
+        )
         raise OpusError(
-            "libopus not found. Install `pyogg` (bundles opus.dll on Windows), "
-            "put opus.dll in receiver/lib/, or set OPUS_LIBRARY. Tried: " + "; ".join(errors)
+            f"libopus not found. {hint}, or set OPUS_LIBRARY. Tried: " + "; ".join(errors)
         )
 
     c_int, c_void_p, c_char_p = ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p

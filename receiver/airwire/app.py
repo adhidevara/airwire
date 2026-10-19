@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import socket
+import sys
 import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -36,8 +37,13 @@ class Settings:
 
     @staticmethod
     def path() -> Path:
-        base = os.environ.get("APPDATA") or str(Path.home() / ".config")
-        return Path(base) / "Airwire" / "settings.json"
+        if sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support"
+        elif os.environ.get("APPDATA"):
+            base = Path(os.environ["APPDATA"])
+        else:
+            base = Path.home() / ".config"
+        return base / "Airwire" / "settings.json"
 
     @classmethod
     def load(cls) -> "Settings":
@@ -86,14 +92,18 @@ class Status:
 
 
 def local_ipv4_addresses() -> list[str]:
-    """LAN addresses of this PC, primary route first (connect() on UDP sends nothing)."""
+    """LAN addresses of this host, primary route first (connect() on UDP sends nothing)."""
     ordered: list[str] = []
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("10.255.255.255", 1))
-            ordered.append(s.getsockname()[0])
-    except OSError:
-        pass
+    for probe in [("10.255.255.255", 1), ("1.1.1.1", 80)]:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(probe)
+                ip = s.getsockname()[0]
+                if ip not in ordered:
+                    ordered.append(ip)
+                break
+        except OSError:
+            pass
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             ip = info[4][0]
