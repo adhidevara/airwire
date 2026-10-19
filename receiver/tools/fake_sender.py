@@ -3,6 +3,7 @@
     python tools/fake_sender.py --host 127.0.0.1                  # clean tone
     python tools/fake_sender.py --host 127.0.0.1 --loss 5 --jitter 15
     python tools/fake_sender.py --wav music_48k.wav --loss 2 --burst 3
+    python tools/fake_sender.py --host 127.0.0.1 --chunk 2 --stall 60 --stall-every 5
     python tools/fake_sender.py --discover                         # find receivers only
 
 Speaks the same protocol as the app (PROTOCOL.md): HELLO every second, AUDIO every
@@ -132,11 +133,14 @@ class FakeSender:
         prev: bytes | None = None
         burst_left = 0
         t0 = time.perf_counter()
+        next_stall = t0 + a.stall_every if a.stall else None
+        stall_until = 0.0
         next_hello = next_report = t0
         total = int(a.seconds * 100) if a.seconds else None
         seq = 0
         print(f"streaming to {self.addr[0]}:{self.addr[1]} session={self.session} "
-              f"loss={a.loss}% burst={a.burst} jitter=0..{a.jitter}ms  Ctrl+C to stop")
+              f"loss={a.loss}% burst={a.burst} jitter=0..{a.jitter}ms chunk={a.chunk} "
+              f"stall={a.stall}ms/{a.stall_every}s  Ctrl+C to stop")
         while total is None or seq < total or pending:
             now = time.perf_counter()
             if now >= next_hello:
@@ -145,7 +149,12 @@ class FakeSender:
             if now >= next_report:
                 self._report()
                 next_report += 1.0
-            due = t0 + seq * FRAME / RATE
+            # Frames leave in groups of `chunk`, once the last one of the group is captured
+            # (like an Android capture buffer that hands over 20-40 ms at a time).
+            due = t0 + (seq // a.chunk * a.chunk + a.chunk - 1) * FRAME / RATE
+            if next_stall is not None and now >= next_stall:
+                stall_until = now + a.stall / 1000  # Wi-Fi hiccup: hold everything, then burst
+                next_stall += a.stall_every
             if (total is None or seq < total) and now >= due:
                 packet = self.encoder.encode(next(frames))
                 red = prev if not a.no_redundancy else None
@@ -156,16 +165,16 @@ class FakeSender:
                     self.dropped += 1
                 else:
                     delay = random.uniform(0, a.jitter) / 1000 if a.jitter else 0.0
-                    heapq.heappush(pending, (now + delay, seq, data))
+                    heapq.heappush(pending, (max(now + delay, stall_until), seq, data))
                 seq += 1
                 continue
-            while pending and pending[0][0] <= now:
+            while pending and pending[0][0] <= now and now >= stall_until:
                 _, _, data = heapq.heappop(pending)
                 self.sock.sendto(data, self.addr)
                 self.sent += 1
             wake = [due] if total is None or seq < total else []
             if pending:
-                wake.append(pending[0][0])
+                wake.append(max(pending[0][0], stall_until))
             if wake:
                 time.sleep(max(0.0, min(wake) - time.perf_counter()))
 
@@ -195,6 +204,11 @@ def main() -> int:
     ap.add_argument("--loss", type=float, default=0, help="random packet loss in %%")
     ap.add_argument("--burst", type=int, default=1, help="packets lost per loss event")
     ap.add_argument("--jitter", type=float, default=0, help="max extra delay per packet in ms")
+    ap.add_argument("--chunk", type=int, default=1,
+                    help="send frames in groups of N, like a bursty capture buffer")
+    ap.add_argument("--stall", type=float, default=0,
+                    help="every --stall-every seconds, hold all packets for N ms")
+    ap.add_argument("--stall-every", type=float, default=5.0)
     ap.add_argument("--no-redundancy", action="store_true")
     ap.add_argument("--discover", action="store_true", help="only list receivers and exit")
     args = ap.parse_args()

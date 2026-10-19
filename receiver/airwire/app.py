@@ -195,10 +195,9 @@ class ReceiverApp:
         status.rtt_ms = st.rtt_ms
         status.kbps = st.kbps
         if jb.playing:
-            # A frame waits (depth - 1) frames in the buffer; its own duration is the
-            # frame_ms the sender spent filling it.
+            # A frame waits wait_ms in the buffer; its own duration is the frame_ms the
+            # sender spent filling it.
             one_way = st.rtt_ms / 2 if st.rtt_ms is not None else 0.0
-            queued = max(0.0, jb.buffer_ms - jb.frame_ms)
             status.est_latency_ms = (sender.capture_ms + jb.frame_ms + one_way
-                                     + queued + self.player.latency_ms)
+                                     + jb.wait_ms + self.player.latency_ms)
         return status
