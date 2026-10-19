@@ -109,7 +109,11 @@ def load_libopus() -> ctypes.CDLL:
     lib.opus_strerror.argtypes = [c_int]
     lib.opus_strerror.restype = c_char_p
     lib.opus_get_version_string.restype = c_char_p
-    # opus_*_ctl are variadic: no argtypes, arguments are passed as explicit c_int.
+    # opus_*_ctl are variadic. Declaring only the fixed (state, request) parameters makes
+    # ctypes pass the value as a variadic argument, which Apple Silicon passes on the stack.
+    for ctl in (lib.opus_encoder_ctl, lib.opus_decoder_ctl):
+        ctl.argtypes = [c_void_p, c_int]
+        ctl.restype = c_int
     _lib = lib
     return lib
 
