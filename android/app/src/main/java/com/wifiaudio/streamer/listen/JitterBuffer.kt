@@ -84,10 +84,16 @@ class JitterBuffer(
 
     fun stats(): Stats = synchronized(lock) { stats.copy() }
 
-    /** Forget everything buffered (new session / sender gone). Keeps [target]. */
-    fun reset() = synchronized(lock) {
+    /** Slack samples held; for tests. */
+    internal val historySize: Int get() = synchronized(lock) { slackSorted.size }
+
+    /**
+     * Forget everything buffered (new session / sender gone). Keeps [target]. [keepHistory]
+     * also keeps the slack statistics: the stream came back over the same Wi-Fi.
+     */
+    fun reset(keepHistory: Boolean = false) = synchronized(lock) {
         clear()
-        clearSlack()
+        if (!keepHistory) clearSlack()
         decoder.reset()
         avgDepth = 0.0
         stats.resets++

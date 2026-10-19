@@ -185,3 +185,14 @@ def test_crossfade_output_is_int16(clock):
     b = np.full((FRAME, 2), -1000, np.int16)
     out = jb._crossfade(a, b)
     assert out.dtype == np.int16 and out[0, 0] == 1000 and out[-1, 0] == -1000
+
+
+def test_reset_can_keep_what_it_learned(clock, packets):
+    jb = make(clock)
+    simulate(jb, clock, packets, [s * 0.010 for s in range(300)], pop_start=0.050)
+    learned = list(jb._slack_sorted)
+    assert learned
+    jb.reset(keep_history=True)
+    assert jb._slack_sorted == learned and jb.depth == 0
+    jb.reset()
+    assert jb._slack_sorted == []

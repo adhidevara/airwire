@@ -80,3 +80,24 @@ def test_garbage_is_counted_not_fatal(server):
     c = client()
     c.sendto(b"hello world", ("127.0.0.1", server.port))
     assert wait_for(lambda: server.invalid_packets == 1)
+
+
+def test_timeout_keeps_buffer_history_when_the_same_session_returns(server, packets):
+    server.TIMEOUT_S, server.PING_INTERVAL_S = 0.3, 0.05
+    phone = client()
+    addr = ("127.0.0.1", server.port)
+    phone.sendto(p.encode(p.Audio(1, 0, packets[0])), addr)
+    assert wait_for(lambda: server.sender is not None)
+    for _ in range(3):
+        server.jitter._record(0.05)  # what the buffer learned about this Wi-Fi
+
+    assert wait_for(lambda: server.sender is None)  # Wi-Fi stalled past the timeout
+    assert len(server.jitter._slack_sorted) == 3
+    phone.sendto(p.encode(p.Audio(1, 40, packets[40])), addr)  # same session is back
+    assert wait_for(lambda: server.sender is not None)
+    assert len(server.jitter._slack_sorted) == 3
+
+    assert wait_for(lambda: server.sender is None)
+    phone.sendto(p.encode(p.Audio(2, 0, packets[0])), addr)  # a new session starts fresh
+    assert wait_for(lambda: server.sender is not None)
+    assert server.jitter._slack_sorted == []

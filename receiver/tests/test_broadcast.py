@@ -138,3 +138,18 @@ def test_capture_failure_refuses(setup):
     assert b.listeners() == []
     assert sent == [(p.Refuse(7, p.REFUSE_NO_CAPTURE), PHONE)]
     assert "loopback" in b.capture_error
+
+
+def test_phone_back_after_timeout_keeps_its_stream(setup, clock):
+    b, key, sent = setup
+    b.handle_listen(listen(key, 1), PHONE)
+    FakeCapture.instances[-1].frame()
+    first = next(pkt for pkt, _ in sent if isinstance(pkt, p.Audio))
+    clock.t += PcAudioBroadcaster.TIMEOUT_S + 0.1
+    b.tick()
+    assert b.listeners() == []
+    sent.clear()
+    b.handle_listen(listen(key, 2), PHONE)  # same LISTEN session, Wi-Fi recovered
+    FakeCapture.instances[-1].frame()
+    again = next(pkt for pkt, _ in sent if isinstance(pkt, p.Audio))
+    assert again.session == first.session and again.seq == first.seq + 1

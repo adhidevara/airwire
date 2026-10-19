@@ -40,7 +40,8 @@ class SenderInfo:
 
 class ReceiverServer:
     PING_INTERVAL_S = 0.5
-    TIMEOUT_S = 2.0
+    # Busy Wi-Fi can hold packets for several seconds; don't drop the sender for that.
+    TIMEOUT_S = 5.0
 
     def __init__(self, jitter: JitterBuffer, stats: NetStats, *, port: int = proto.DEFAULT_PORT,
                  host: str = "0.0.0.0", name: str | None = None,
@@ -58,6 +59,8 @@ class ReceiverServer:
         self.invalid_packets = 0
         self.foreign_packets = 0
         self._sender: SenderInfo | None = None
+        # (addr, session) of a sender that timed out, so its return keeps the buffer history
+        self._last_session: tuple[tuple[str, int], int] | None = None
         self.broadcaster: PcAudioBroadcaster | None = None
         self._lock = threading.Lock()
         self._running = False
@@ -80,6 +83,11 @@ class ReceiverServer:
     def sender(self) -> SenderInfo | None:
         with self._lock:
             return dataclasses.replace(self._sender) if self._sender else None
+
+    def sender_silence_s(self) -> float:
+        """Seconds since the locked sender's last packet (0 without a sender)."""
+        with self._lock:
+            return self._clock() - self._sender.last_seen if self._sender else 0.0
 
     # ---- loop ----------------------------------------------------------------
 
@@ -165,9 +173,10 @@ class ReceiverServer:
         with self._lock:
             s = self._sender
             if s is None or (s.addr != addr and now - s.last_seen > self.TIMEOUT_S):
-                log.info("sender connected: %s:%d", *addr)
+                resumed = self._last_session == (addr, session)
+                log.info("sender %s: %s:%d", "is back" if resumed else "connected", *addr)
                 s = self._sender = SenderInfo(addr, session, connected_at=now, last_seen=now)
-                self.jitter.reset()
+                self.jitter.reset(keep_history=resumed)
                 self.stats.reset()
             elif s.addr != addr:
                 return None
@@ -179,10 +188,12 @@ class ReceiverServer:
             s.last_seen = now
             return s
 
-    def _disconnect(self) -> None:
+    def _disconnect(self, keep_history: bool = False) -> None:
         with self._lock:
+            s = self._sender
+            self._last_session = (s.addr, s.session) if keep_history and s else None
             self._sender = None
-        self.jitter.reset()
+        self.jitter.reset(keep_history=keep_history)
         self.stats.reset()
 
     def _tick(self, now: float) -> None:
@@ -195,7 +206,7 @@ class ReceiverServer:
             return
         if timed_out:
             log.info("sender %s timed out", sender.addr)
-            self._disconnect()
+            self._disconnect(keep_history=True)
             return
         self.stats.sample(now)
         ping = proto.Ping(

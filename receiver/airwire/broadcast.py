@@ -57,7 +57,9 @@ class _Listener:
 
 
 class PcAudioBroadcaster:
-    TIMEOUT_S = 3.0
+    # Busy Wi-Fi can hold LISTENs for several seconds; don't drop the phone for that.
+    TIMEOUT_S = 6.0
+    RECENT_MAX = 8
     HELLO_INTERVAL_S = 1.0
     MIN_KBPS, MAX_KBPS = 32, 256
 
@@ -77,6 +79,9 @@ class PcAudioBroadcaster:
         self._listeners: dict[Addr, _Listener] = {}
         self._counters: dict[str, int] = {}        # pairing key hash -> last LISTEN counter
         self._stopped: set[tuple[Addr, int]] = set()
+        # Streams of phones that timed out, by (addr, LISTEN session). A phone that comes
+        # back gets the same stream session, so its buffer keeps what it learned.
+        self._recent: dict[tuple[Addr, int], tuple[int, int]] = {}
         self._capture: LoopbackCapture | None = None
 
     # ---- packets from the UDP thread ------------------------------------------
@@ -98,11 +103,14 @@ class PcAudioBroadcaster:
         with self._lock:
             current = self._listeners.get(addr)
             if current is None or current.info.session != pkt.session:
-                log.info("%s (%s:%d) started listening at %d kbps", device, *addr, kbps)
+                resumed = self._recent.pop((addr, pkt.session), None)
+                log.info("%s (%s:%d) %s at %d kbps", device, *addr,
+                         "is back" if resumed else "started listening", kbps)
+                stream, seq = resumed or (random.randrange(1, 1 << 16), 0)
                 self._listeners[addr] = _Listener(
                     ListenerInfo(addr, device, pkt.session, kbps, since=now, last_seen=now),
                     OpusEncoder(channels=2, bitrate=kbps * 1000),
-                    stream_session=random.randrange(1, 1 << 16), applied_kbps=kbps)
+                    stream_session=stream, applied_kbps=kbps, seq=seq)
                 changed = True
             else:
                 current.info.last_seen = now
@@ -143,7 +151,11 @@ class PcAudioBroadcaster:
         with self._lock:
             gone = [a for a, l in self._listeners.items() if now - l.info.last_seen > self.TIMEOUT_S]
             for addr in gone:
-                log.info("%s timed out", self._listeners.pop(addr).info.device)
+                l = self._listeners.pop(addr)
+                log.info("%s timed out", l.info.device)
+                self._recent[(addr, l.info.session)] = (l.stream_session, l.seq)
+            while len(self._recent) > self.RECENT_MAX:
+                del self._recent[next(iter(self._recent))]
         if gone:
             self._after_removal()
 

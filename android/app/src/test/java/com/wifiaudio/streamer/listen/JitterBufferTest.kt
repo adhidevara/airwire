@@ -176,6 +176,19 @@ class JitterBufferTest {
     }
 
     @Test
+    fun resetCanKeepWhatItLearned() {
+        val jb = make()
+        simulate(jb, List(300) { it * 0.010 }, popStart = 0.050)
+        val learned = jb.historySize
+        assertTrue(learned > 0)
+        jb.reset(keepHistory = true)
+        assertEquals(learned, jb.historySize)
+        assertEquals(0, jb.pop(out)) // the buffer itself is empty: pre-roll again
+        jb.reset()
+        assertEquals(0, jb.historySize)
+    }
+
+    @Test
     fun clockDriftIsCompensated() {
         val jb = make()
         simulate(jb, List(6000) { it * 0.00999 }, popStart = 0.030)

@@ -96,11 +96,16 @@ class JitterBuffer:
         self._since_drop = 0
         self._avg_wait = 0.0
 
-    def reset(self) -> None:
-        """Forget everything buffered (new session / sender gone). Keeps `target`."""
+    def reset(self, keep_history: bool = False) -> None:
+        """Forget everything buffered (new session / sender gone). Keeps `target`.
+
+        `keep_history` keeps the slack statistics too, for a sender that went quiet and
+        comes back with the same session: the Wi-Fi it uses hasn't changed.
+        """
         with self._lock:
             self._clear()
-            self._clear_slack()
+            if not keep_history:
+                self._clear_slack()
             self._decoder.reset()
             self._avg_depth = 0.0
             self.stats.resets += 1

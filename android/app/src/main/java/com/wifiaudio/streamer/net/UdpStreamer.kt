@@ -204,7 +204,7 @@ class UdpStreamer(
         const val STOP_TIMEOUT_MS = 1000L
         const val HELLO_INTERVAL_MS = 1000L
         const val STATS_INTERVAL_MS = 500L
-        const val RECEIVER_TIMEOUT_MS = 2000L
+        const val RECEIVER_TIMEOUT_MS = 5000L // busy Wi-Fi can hold PINGs for seconds
         /** DSCP EF (46) << 2. */
         const val TOS_EXPEDITED = 0xB8
     }

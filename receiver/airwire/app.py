@@ -90,6 +90,7 @@ class Status:
     output_latency_ms: float = 0.0
     output_device: str = ""
     output_error: str | None = None
+    silent_s: float = 0.0          # since the sender's last packet
     local_ips: list[str] = field(default_factory=list)
     listeners: list[ListenerInfo] = field(default_factory=list)
     allow_listen: bool = True
@@ -206,6 +207,7 @@ class ReceiverApp:
         if sender is None:
             return status
         status.sender_name = sender.name
+        status.silent_s = self.server.sender_silence_s()
         status.sender_addr = f"{sender.addr[0]}:{sender.addr[1]}"
         status.source = SOURCE_LABELS.get(sender.source, "") if sender.source is not None else ""
         status.bitrate_kbps = sender.bitrate_kbps

@@ -142,8 +142,9 @@ class PcAudioListener(
             when (val p = Protocol.parse(buf, packet.length)) {
                 is Protocol.Audio -> {
                     if (p.session != streamSession) {
+                        // Same PC, same Wi-Fi: keep what the buffer learned about it.
+                        jitter.reset(keepHistory = streamSession != -1)
                         streamSession = p.session
-                        jitter.reset()
                         synchronized(statsLock) { stats.reset() }
                     }
                     jitter.push(p.seq, p.primary, p.redundant)

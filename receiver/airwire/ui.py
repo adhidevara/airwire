@@ -294,6 +294,10 @@ class ReceiverWindow:
         self.ips_var.set(host_prefix + (", ".join(s.local_ips) or "no LAN address found"))
         if s.connected and s.playing:
             self.state_label.configure(text="● Streaming", foreground=GREEN)
+        elif s.connected and s.silent_s >= 1:
+            self.state_label.configure(
+                text=f"● Connected – no audio for {s.silent_s:.0f} s (Wi-Fi busy?)",
+                foreground=AMBER)
         elif s.connected:
             self.state_label.configure(text="● Connected – buffering", foreground=AMBER)
         else:
