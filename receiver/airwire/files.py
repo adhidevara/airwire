@@ -25,6 +25,7 @@ import re
 import secrets
 import shutil
 import socket
+import sys
 import threading
 import time
 import uuid
@@ -349,7 +350,8 @@ class FileService:
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
     # On Windows SO_REUSEADDR lets a second receiver bind the same port and steal requests.
-    allow_reuse_address = False
+    # Elsewhere it only allows a quick restart while old connections sit in TIME_WAIT.
+    allow_reuse_address = sys.platform != "win32"
 
     def __init__(self, address, handler, service: FileService):
         self.service = service

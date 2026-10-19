@@ -42,7 +42,9 @@ jaringan lokal.
 
 ## Cara pakai singkat
 
-### 1. Receiver (Windows, Python 3.10+)
+### 1. Receiver (Python 3.10+)
+
+**Windows**
 
 ```bash
 cd receiver
@@ -67,7 +69,25 @@ Wi-Fi Anda "Public", ubah ke Private atau buat rule dari PowerShell Administrato
 
 ```bash
 netsh advfirewall firewall add rule name="Airwire Receiver" dir=in action=allow protocol=UDP localport=50005 profile=private
+netsh advfirewall firewall add rule name="Airwire Files" dir=in action=allow protocol=TCP localport=50005 profile=private
 ```
+
+**macOS** (sudah dites di Ventura). Python dari Homebrew tidak membawa Tkinter dan tidak
+mengizinkan `pip install` global, jadi pasang `python-tk` dan pakai virtual environment:
+
+```bash
+brew install python python-tk opus
+cd receiver
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+python -m airwire
+```
+
+Setelah itu cukup double-click `receiver/Start Receiver.command`, yang otomatis memakai
+`receiver/.venv`. Saat macOS bertanya apakah Python boleh menerima koneksi masuk, pilih
+**Allow**. Pengaturan disimpan di `~/Library/Application Support/Airwire/settings.json`.
 
 ### 2. App Android
 
@@ -137,6 +157,10 @@ python -m pytest
 - **Speaker HP tidak bisa dimatikan total** oleh app biasa. Caranya: turunkan volume media
   ke 0.
 - **Satu pengirim per receiver.**
+
+## Kontributor
+
+- [Muhammad Hasief](https://github.com/hantungoprek): dukungan receiver untuk macOS.
 
 ## Lisensi
 

@@ -7,6 +7,7 @@
   <a href="https://github.com/adhidevara/airwire/actions/workflows/ci.yml"><img src="https://github.com/adhidevara/airwire/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white" alt="Android 10+">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/receiver-Windows%20%7C%20macOS-475569" alt="Receiver: Windows and macOS">
   <img src="https://img.shields.io/badge/codec-Opus-2563EB" alt="Opus codec">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22D3EE" alt="MIT license"></a>
 </p>
@@ -70,7 +71,9 @@ same byte vectors.
 
 ## Quick start
 
-### 1. Receiver (Windows, Python 3.10+)
+### 1. Receiver (Python 3.10+)
+
+**Windows**
 
 ```bash
 cd receiver
@@ -86,6 +89,23 @@ output device and volume.
 > **Firewall:** allow Python on *Private* networks when Windows asks. If your Wi-Fi profile
 > is *Public*, either switch it to Private or allow port 50005 inbound (UDP for audio, TCP
 > for files).
+
+**macOS** (tested on Ventura). Homebrew's Python ships without Tkinter and does not allow
+system-wide `pip install`, so install `python-tk` and use a virtual environment:
+
+```bash
+brew install python python-tk opus
+cd receiver
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+python -m airwire
+```
+
+After that, double-click `receiver/Start Receiver.command`; it uses `receiver/.venv`
+automatically. When macOS asks whether Python may accept incoming network connections,
+click **Allow**.
 
 ### 2. Android app
 
@@ -176,10 +196,14 @@ accepted once the first one stops.
 only paired phones can send or receive them. Use it on networks you trust, not on public
 Wi-Fi. *Reset pairing* in the receiver window revokes every phone at once.
 
+## Contributors
+
+- [Muhammad Hasief](https://github.com/hantungoprek): macOS receiver support.
+
 ## License
 
 [MIT](LICENSE) © 2026 Ariel.
 
 The Android build downloads [libopus](https://opus-codec.org) (BSD-3-Clause) at configure
 time and verifies its SHA-256. On Windows the receiver uses the `opus.dll` shipped in the
-[PyOgg](https://github.com/TeamPyOgg/PyOgg) wheel.
+[PyOgg](https://github.com/TeamPyOgg/PyOgg) wheel; on macOS it uses Homebrew's libopus.

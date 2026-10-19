@@ -7,8 +7,12 @@ on:
 
 jobs:
   receiver:
-    name: Receiver tests (Python)
-    runs-on: ubuntu-latest
+    name: Receiver tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     defaults:
       run:
         working-directory: receiver
@@ -17,8 +21,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Install libopus
+      - name: Install libopus (Ubuntu)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libopus0
+      - name: Install libopus (macOS)
+        if: runner.os == 'macOS'
+        run: brew install opus
       - name: Install test dependencies
         run: pip install numpy pytest
       - name: Run tests
