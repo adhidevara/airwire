@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, font as tkfont, messagebox, ttk
 
 from .app import ReceiverApp, Settings, Status
 from .files import Transfer
@@ -63,6 +63,18 @@ class ReceiverWindow:
             style.configure("Key.TLabel", foreground=GREY, font=("Helvetica Neue", 10))
             style.configure("Brand.TLabel", font=("Helvetica Neue", 16, "bold"), foreground=BRAND_BLUE)
             style.configure("Code.TLabel", font=("Menlo", 22, "bold"), foreground=BRAND_BLUE)
+        elif sys.platform != "win32":
+            # Linux and others: Segoe UI and Consolas aren't there, and the default Tk
+            # theme looks dated. Use clam with the desktop's own fonts.
+            if "clam" in style.theme_names():
+                style.theme_use("clam")
+            sans = tkfont.nametofont("TkDefaultFont").actual("family")
+            mono = tkfont.nametofont("TkFixedFont").actual("family")
+            style.configure("Big.TLabel", font=(sans, 13, "bold"))
+            style.configure("Value.TLabel", font=(sans, 10))
+            style.configure("Key.TLabel", foreground=GREY)
+            style.configure("Brand.TLabel", font=(sans, 16, "bold"), foreground=BRAND_BLUE)
+            style.configure("Code.TLabel", font=(mono, 22, "bold"), foreground=BRAND_BLUE)
         else:
             if "vista" in style.theme_names():
                 style.theme_use("vista")
