@@ -373,12 +373,32 @@ class _Handler(BaseHTTPRequestHandler):
     # ---- helpers ---------------------------------------------------------------
 
     def _json(self, status: int, payload: dict | None = None) -> None:
+        if status >= 400:
+            self._discard_body()
         body = json.dumps(payload or {}).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _discard_body(self, limit: int = 8 << 20) -> None:
+        """Read an unread request body before answering with an error. Closing a socket
+        with unread data makes Windows send RST, and the client would see "connection
+        reset" instead of our 401."""
+        length = self.headers.get("Content-Length", "")
+        if getattr(self, "_body_read", False) or not length.isdigit():
+            return
+        self._body_read = True
+        left = int(length)
+        if left > limit:
+            self.close_connection = True
+            return
+        while left > 0:
+            chunk = self.rfile.read(min(left, 1 << 16))
+            if not chunk:
+                break
+            left -= len(chunk)
 
     def _device(self) -> str | None:
         """Paired device name for this request, or None after sending 401."""
@@ -402,6 +422,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", "0"))
             data = json.loads(self.rfile.read(min(length, 4096)) or b"{}")
+            self._body_read = length <= 4096
             token = self.service.pairing.pair(str(data.get("code", "")), str(data.get("device", "")))
         except PairingError as exc:
             return self._json(exc.status, {"error": str(exc)})
@@ -443,6 +464,7 @@ class _Handler(BaseHTTPRequestHandler):
         length_header = self.headers.get("Content-Length")
         if length_header is None or not length_header.isdigit():
             return self._json(411, {"error": "Content-Length required"})
+        self._body_read = True
         try:
             t = self.service.receive(name, int(length_header), self.rfile, device)
         except InsufficientStorage as exc:
