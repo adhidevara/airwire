@@ -37,7 +37,10 @@ class UdpStreamer(
     private val onFatal: (String) -> Unit,
 ) {
     private val session = Random.nextInt(1, 0x10000)
-    private val socket = DatagramSocket().apply { soTimeout = 250 }
+    private val socket = DatagramSocket().apply {
+        soTimeout = 250
+        trafficClass = TOS_EXPEDITED // asks Wi-Fi (WMM) for the voice/video queue
+    }
     private val packetsSent = AtomicLong()
     private val bytesSent = AtomicLong()
 
@@ -202,5 +205,7 @@ class UdpStreamer(
         const val HELLO_INTERVAL_MS = 1000L
         const val STATS_INTERVAL_MS = 500L
         const val RECEIVER_TIMEOUT_MS = 2000L
+        /** DSCP EF (46) << 2. */
+        const val TOS_EXPEDITED = 0xB8
     }
 }
