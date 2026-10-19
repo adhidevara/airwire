@@ -7,7 +7,7 @@
   <a href="https://github.com/adhidevara/airwire/actions/workflows/ci.yml"><img src="https://github.com/adhidevara/airwire/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white" alt="Android 10+">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/receiver-Windows%20%7C%20macOS-475569" alt="Receiver: Windows and macOS">
+  <img src="https://img.shields.io/badge/receiver-Windows%20%7C%20macOS%20%7C%20Linux-475569" alt="Receiver: Windows, macOS and Linux">
   <img src="https://img.shields.io/badge/codec-Opus-2563EB" alt="Opus codec">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22D3EE" alt="MIT license"></a>
 </p>
@@ -111,6 +111,22 @@ python -m airwire
 After that, double-click `receiver/Start Receiver.command`; it uses `receiver/.venv`
 automatically. When macOS asks whether Python may accept incoming network connections,
 click **Allow**.
+
+**Linux** (tested on Linux Mint 22.3; Ubuntu and Debian work the same way). `sounddevice`
+needs the system PortAudio library and the receiver needs libopus:
+
+```bash
+sudo apt install python3-venv python3-tk libportaudio2 libopus0
+cd receiver
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+python -m airwire
+```
+
+If ufw is enabled, open the port with `sudo ufw allow 50005`. Playing the PC's audio on
+the phone needs PulseAudio or PipeWire, the default on current Mint and Ubuntu.
 
 ### 2. Android app
 
@@ -225,7 +241,7 @@ Wi-Fi. *Reset pairing* in the receiver window revokes every phone at once.
 
 ## Contributors
 
-- [Muhammad Hasief](https://github.com/hantungoprek): macOS receiver support.
+- [Muhammad Hasief](https://github.com/hantungoprek): macOS receiver support, Linux testing.
 
 ## License
 

@@ -7,7 +7,8 @@ Library lookup order:
 1. `OPUS_LIBRARY` environment variable (full path)
 2. `receiver/lib/opus.dll` (drop-in)
 3. the `opus.dll` bundled with the `pyogg` wheel on Windows
-4. the system library (`ctypes.util.find_library("opus")`)
+4. the system library (`ctypes.util.find_library("opus")`), and on Linux the usual
+   library directories directly, in case the ldconfig cache is stale
 """
 
 from __future__ import annotations
@@ -65,6 +66,11 @@ def _candidates() -> list[str]:
             paths.append(os.path.join(loc, lib_name))
     if found := ctypes.util.find_library("opus"):
         paths.append(found)
+    if sys.platform.startswith("linux"):
+        # find_library reads the ldconfig cache; open the file directly if that cache is stale.
+        machine = os.uname().machine
+        for libdir in (f"/usr/lib/{machine}-linux-gnu", "/usr/lib64", "/usr/lib", "/usr/local/lib"):
+            paths.append(f"{libdir}/libopus.so.0")
     return paths
 
 
@@ -85,11 +91,12 @@ def load_libopus() -> ctypes.CDLL:
         except OSError as exc:
             errors.append(f"{path}: {exc}")
     else:
-        hint = (
-            "Install `brew install opus` or place libopus.dylib in receiver/lib/"
-            if sys.platform == "darwin"
-            else "Install `pyogg` (bundles opus.dll on Windows) or place opus.dll in receiver/lib/"
-        )
+        if sys.platform == "darwin":
+            hint = "Install `brew install opus` or place libopus.dylib in receiver/lib/"
+        elif sys.platform == "win32":
+            hint = "Install `pyogg` (bundles opus.dll on Windows) or place opus.dll in receiver/lib/"
+        else:
+            hint = "Install `sudo apt install libopus0` (then `sudo ldconfig`)"
         raise OpusError(
             f"libopus not found. {hint}, or set OPUS_LIBRARY. Tried: " + "; ".join(errors)
         )

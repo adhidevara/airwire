@@ -95,6 +95,22 @@ Setelah itu cukup double-click `receiver/Start Receiver.command`, yang otomatis 
 `receiver/.venv`. Saat macOS bertanya apakah Python boleh menerima koneksi masuk, pilih
 **Allow**. Pengaturan disimpan di `~/Library/Application Support/Airwire/settings.json`.
 
+**Linux** (sudah dites di Linux Mint 22.3; Ubuntu dan Debian caranya sama). `sounddevice`
+butuh library PortAudio dari sistem, dan receiver butuh libopus:
+
+```bash
+sudo apt install python3-venv python3-tk libportaudio2 libopus0
+cd receiver
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+python -m airwire
+```
+
+Kalau ufw aktif, buka port-nya dengan `sudo ufw allow 50005`. Fitur memutar audio PC di HP
+butuh PulseAudio atau PipeWire, yang sudah jadi bawaan Mint dan Ubuntu versi sekarang.
+
 ### 2. App Android
 
 **Paling mudah:** unduh `Airwire-*.apk` dari [release terbaru](https://github.com/adhidevara/airwire/releases/latest),
@@ -182,7 +198,7 @@ python -m pytest
 
 ## Kontributor
 
-- [Muhammad Hasief](https://github.com/hantungoprek): dukungan receiver untuk macOS.
+- [Muhammad Hasief](https://github.com/hantungoprek): dukungan receiver untuk macOS, pengujian di Linux.
 
 ## Lisensi
 
