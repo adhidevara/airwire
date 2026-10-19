@@ -96,7 +96,9 @@ Setelah itu cukup double-click `receiver/Start Receiver.command`, yang otomatis 
 **Allow**. Pengaturan disimpan di `~/Library/Application Support/Airwire/settings.json`.
 
 **Linux** (sudah dites di Linux Mint 22.3; Ubuntu dan Debian caranya sama). `sounddevice`
-butuh library PortAudio dari sistem, dan receiver butuh libopus:
+butuh library PortAudio dari sistem, dan receiver butuh libopus. Pakai Python bawaan
+distro (`python3` dari apt). Python dari Homebrew di Linux biasanya tidak membawa Tkinter
+dan bisa bentrok dengan paket sistem.
 
 ```bash
 sudo apt install python3-venv python3-tk libportaudio2 libopus0

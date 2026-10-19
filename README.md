@@ -113,7 +113,9 @@ automatically. When macOS asks whether Python may accept incoming network connec
 click **Allow**.
 
 **Linux** (tested on Linux Mint 22.3; Ubuntu and Debian work the same way). `sounddevice`
-needs the system PortAudio library and the receiver needs libopus:
+needs the system PortAudio library and the receiver needs libopus. Use the distribution's
+Python (`python3` from apt): a Homebrew Python on Linux usually comes without Tkinter and
+can clash with the system packages.
 
 ```bash
 sudo apt install python3-venv python3-tk libportaudio2 libopus0
