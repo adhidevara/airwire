@@ -40,7 +40,7 @@ receiver decodes everything to stereo. Default frame duration is 10 ms (480 samp
 | 1    | channels    | 1 or 2 (encoder channels) |
 | 1    | frameMs     | 10 or 20 |
 | 2    | bitrateKbps | current encoder bitrate |
-| 1    | source      | 0 = internal audio, 1 = microphone |
+| 1    | source      | 0 = internal audio, 1 = microphone, 2 = PC system audio |
 | 2    | captureMs   | sender-side latency estimate: capture buffer + Opus lookahead (excludes the frame itself) |
 | rest | name        | device name, e.g. `"Pixel 8"` |
 
@@ -62,6 +62,9 @@ The sender broadcasts to the Wi-Fi subnet broadcast address and to `255.255.255.
 
 ### `0x20 PING` (L → A, every 500 ms while a sender is locked)
 
+In PC → phone mode the roles swap: the phone receives, so it sends PING and the PC
+answers PONG.
+
 | Size | Field        | Notes |
 |-----:|--------------|-------|
 | 8    | tNs          | receiver monotonic clock, nanoseconds (opaque to sender) |
@@ -82,6 +85,42 @@ The sender should show the stats it receives in PING.
 | Size | Field   |
 |-----:|---------|
 | 2    | session |
+
+### `0x40 LISTEN` (phone → PC, every 1 s while the phone wants the PC's audio)
+
+| Size | Field       | Notes |
+|-----:|-------------|-------|
+| 2    | session     | random per listening session |
+| 2    | bitrateKbps | bitrate the phone asks for; the PC clamps it to 32–256 |
+| 8    | counter     | must grow with every LISTEN from this phone (the app uses Unix time in ms) |
+| 16   | mac         | first 16 bytes of HMAC-SHA256(key, header + session + bitrateKbps + counter) |
+| rest | name        | phone name |
+
+`key` is SHA-256 of the file-transfer pairing token (UTF-8). The PC keeps exactly that hash
+for every paired phone, so it can check the MAC without storing the token. A LISTEN whose
+MAC matches no paired phone, or whose counter is not larger than the last one seen from
+that phone, is refused. Captured packets therefore can't be replayed to redirect the
+stream.
+
+### `0x41 REFUSE` (PC → phone, reply to a LISTEN that won't be served)
+
+| Size | Field   | Notes |
+|-----:|---------|-------|
+| 2    | session | from the LISTEN |
+| 1    | reason  | 1 = not paired, 2 = turned off on the PC, 3 = the PC can't capture its audio, 4 = stopped from the PC |
+
+## PC → phone
+
+The phone plays what the PC is playing. The PC is the sender and the phone the receiver;
+every other rule above applies unchanged.
+
+1. The phone sends LISTEN to the PC's port (50005) every second.
+2. The PC captures its system audio once (WASAPI loopback on Windows, the sink monitor on
+   Linux) and sends HELLO (source 2) and AUDIO to every listening phone, from port 50005.
+   Each phone gets its own session and Opus encoder at the bitrate it asked for.
+3. The phone sends PING every 500 ms with its loss, jitter and buffer; the PC answers PONG.
+4. The phone sends BYE with its LISTEN session when it stops. Without a LISTEN for 3 s the
+   PC stops streaming to it. *Stop* on the PC answers the next LISTEN with REFUSE 4.
 
 ## Receiver session rules
 

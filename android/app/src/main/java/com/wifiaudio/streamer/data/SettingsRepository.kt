@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.wifiaudio.streamer.AudioMode
 import com.wifiaudio.streamer.AudioSourceType
 import com.wifiaudio.streamer.net.Protocol
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,7 @@ data class StreamSettings(
     val port: Int = Protocol.DEFAULT_PORT,
     val source: AudioSourceType = AudioSourceType.INTERNAL,
     val bitrateKbps: Int = 128,
+    val mode: AudioMode = AudioMode.SEND,
 )
 
 class SettingsRepository(context: Context) {
@@ -39,6 +41,7 @@ class SettingsRepository(context: Context) {
                 source = p[SOURCE]?.let { runCatching { AudioSourceType.valueOf(it) }.getOrNull() }
                     ?: AudioSourceType.INTERNAL,
                 bitrateKbps = p[BITRATE] ?: 128,
+                mode = p[MODE]?.let { runCatching { AudioMode.valueOf(it) }.getOrNull() } ?: AudioMode.SEND,
             )
         }
 
@@ -68,6 +71,7 @@ class SettingsRepository(context: Context) {
             p[PORT] = s.port
             p[SOURCE] = s.source.name
             p[BITRATE] = s.bitrateKbps
+            p[MODE] = s.mode.name
         }
     }
 
@@ -76,6 +80,7 @@ class SettingsRepository(context: Context) {
         val PORT = intPreferencesKey("port")
         val SOURCE = stringPreferencesKey("source")
         val BITRATE = intPreferencesKey("bitrate_kbps")
+        val MODE = stringPreferencesKey("audio_mode")
         val FILES_TOKEN = stringPreferencesKey("files_token")
         val FILES_PC_NAME = stringPreferencesKey("files_pc_name")
     }

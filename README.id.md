@@ -28,8 +28,11 @@ jaringan lokal.
   - Setiap paket juga membawa salinan frame sebelumnya.
   - Frame yang hilang dipulihkan dari salinan itu dulu.
   - Kalau tidak ada salinan, dipakai FEC Opus, lalu PLC (penambalan suara).
-- **Jitter buffer adaptif.** Buffer membesar saat terjadi underrun, mengecil lagi saat
-  jaringan stabil, dan mengoreksi perbedaan clock antara HP dan soundcard.
+- **Jitter buffer adaptif.**
+  - Setiap frame mencatat berapa lama ia menunggu sebelum diputar.
+  - Latency dipangkas begitu 10 detik terakhir menunjukkan buffer berlebih, dan ditahan
+    selama Wi-Fi masih sering tersendat. Hasilnya delay rendah tanpa suara putus.
+  - Perbedaan clock antara HP dan soundcard juga dikoreksi.
 - **Auto Scan Receiver.** Laptop ditemukan otomatis, atau IP bisa diketik manual.
 - **Tetap jalan saat layar terkunci.** App berjalan sebagai foreground service dengan
   notifikasi dan tombol Stop.
@@ -39,6 +42,9 @@ jaringan lokal.
   - HP → PC: kirim foto, video, atau dokumen, atau lewat *Share → Airwire* dari app mana pun.
   - PC → HP: kirim file dari window receiver.
   - Pairing cukup sekali dengan kode 6 digit, dan setiap file diverifikasi dengan SHA-256.
+- **Audio PC bisa diputar di HP.** Pilih mode *PC → Phone* di app, maka HP memutar apa yang
+  sedang diputar PC, seperti headphone wireless. Memakai pairing yang sama, dan hanya HP
+  yang sudah paired yang bisa meminta audio PC. Untuk PC Windows dan Linux.
 
 ## Cara pakai singkat
 
@@ -130,13 +136,27 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
    HP yang sudah paired yang bisa mengirim atau menerima file. Gunakan di jaringan yang
    Anda percaya. Tombol **Reset pairing** mencabut akses semua HP sekaligus.
 
+### 5. Putar audio PC di HP
+
+1. Pairing sekali di tab **Files** (lihat di atas).
+2. Di tab **Audio** pilih **PC → Phone**, lalu tap **START LISTENING**.
+3. Window receiver menampilkan HP yang sedang mendengarkan di bagian *Play this PC on your
+   phone*. Tombol **Stop** menghentikannya. Hapus centang di kotak itu untuk mematikan
+   fitur ini.
+
+PC menangkap audio sistemnya lewat paket `soundcard` (WASAPI loopback di Windows,
+PulseAudio atau PipeWire di Linux). macOS belum didukung untuk arah ini, karena butuh
+perangkat virtual seperti BlackHole.
+
 ## Latency
 
-Hasil uji di loopback: **42 ms**.
+Estimasi end-to-end di loopback: **sekitar 45 ms**, dengan buffer 20 ms.
 
-Di jaringan sungguhan, buffer menyesuaikan kondisi Wi-Fi:
+Di jaringan sungguhan, buffer mengikuti kondisi Wi-Fi. Ia menyisakan cukup ruang untuk
+gangguan yang terjadi dalam 10 detik terakhir, dan sisanya dilepas lagi.
 - Wi-Fi 5 GHz yang sepi: mendekati angka loopback.
-- Wi-Fi 2.4 GHz yang ramai: buffer bisa melebihi 100 ms.
+- Wi-Fi 2.4 GHz yang ramai: butuh buffer lebih besar.
+- Paket ditandai sebagai trafik real-time (DSCP EF), yang didahulukan oleh router dengan WMM.
 - Hindari Bluetooth di sisi laptop; Bluetooth sendiri menambah 100–200 ms.
 
 ## Test tanpa HP
@@ -146,6 +166,8 @@ cd receiver
 python tools/fake_sender.py --discover
 python tools/fake_sender.py --loss 5 --jitter 15 --seconds 30
 python tools/fake_sender.py --wav lagu_48k.wav --loss 2 --burst 3
+python tools/fake_sender.py --chunk 2 --stall 60 --stall-every 4   # HP & Wi-Fi tersendat
+python tools/fake_listener.py --host 127.0.0.1 --code 123456       # dengarkan PC ini
 python -m pytest
 ```
 

@@ -1,3 +1,5 @@
+import hashlib
+
 import pytest
 
 from airwire import protocol as p
@@ -12,6 +14,9 @@ ROUNDTRIP = [
     p.Ping(t_ns=2**63 - 1, loss_permille=15, jitter_us=2300, buffer_ms=20),
     p.Pong(t_ns=987654321),
     p.Bye(session=7),
+    p.Listen(session=0x1234, bitrate_kbps=96, counter=1_700_000_000_000, mac=bytes(range(16)),
+             name="Pixel"),
+    p.Refuse(session=7, reason=p.REFUSE_NOT_PAIRED),
 ]
 
 
@@ -60,3 +65,15 @@ def test_name_is_truncated_on_a_character_boundary():
 def test_ping_values_are_clamped():
     decoded = p.decode(p.encode(p.Ping(1, loss_permille=5000, jitter_us=-3, buffer_ms=10**6)))
     assert (decoded.loss_permille, decoded.jitter_us, decoded.buffer_ms) == (1000, 0, 0xFFFF)
+
+
+def test_listen_golden_bytes():
+    # Same vector as ProtocolTest.kt: key = SHA-256("test-token").
+    key = hashlib.sha256(b"test-token").digest()
+    mac = p.listen_mac(key, 0x1234, 96, 1_700_000_000_000)
+    assert mac.hex() == "aa1b3c7b2972fc3e1494eb827bae358e"
+    data = p.encode(p.Listen(0x1234, 96, 1_700_000_000_000, mac, "Pixel"))
+    assert data == bytes.fromhex(
+        "5741 0140 1234 0060 0000018bcfe56800 aa1b3c7b2972fc3e1494eb827bae358e 506978656c"
+        .replace(" ", ""))
+    assert p.encode(p.Refuse(7, p.REFUSE_NOT_PAIRED)) == bytes.fromhex("57410141000701")

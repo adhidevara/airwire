@@ -1,7 +1,6 @@
 package com.wifiaudio.streamer.service
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,12 +13,10 @@ import android.content.pm.ServiceInfo
 import android.media.AudioRecord
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -44,8 +41,7 @@ class StreamingService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private var streamer: UdpStreamer? = null
     private var projection: MediaProjection? = null
-    private var wakeLock: PowerManager.WakeLock? = null
-    private val wifiLocks = mutableListOf<WifiManager.WifiLock>()
+    private val locks by lazy { NetworkLocks(this, "wifiaudio:stream") }
     private var stopping = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -94,7 +90,7 @@ class StreamingService : Service() {
                 record.release()
                 error("Audio capture could not be initialised")
             }
-            acquireLocks()
+            locks.acquire()
             streamer = UdpStreamer(
                 record = record,
                 channels = if (source == AudioSourceType.INTERNAL) 2 else 1,
@@ -153,41 +149,12 @@ class StreamingService : Service() {
             projection = null
             runCatching { it.stop() }
         }
-        releaseLocks()
+        locks.release()
         FileTransfers.setStreaming(false)
         StreamController.setStats(StreamStats())
         StreamController.setStatus(if (error != null) StreamStatus.Failed(error) else StreamStatus.Idle)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
-    }
-
-    @SuppressLint("WakelockTimeout") // held exactly as long as the user keeps streaming
-    private fun acquireLocks() {
-        val wifi = applicationContext.getSystemService(WifiManager::class.java)!!
-        // LOW_LATENCY disables Wi-Fi power save while the screen is on; HIGH_PERF covers the
-        // locked-screen case.
-        @Suppress("DEPRECATION")
-        listOf(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, WifiManager.WIFI_MODE_FULL_HIGH_PERF)
-            .forEach { mode ->
-                wifi.createWifiLock(mode, "wifiaudio:$mode").apply {
-                    setReferenceCounted(false)
-                    acquire()
-                    wifiLocks += this
-                }
-            }
-        wakeLock = getSystemService(PowerManager::class.java)!!
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "wifiaudio:stream")
-            .apply {
-                setReferenceCounted(false)
-                acquire()
-            }
-    }
-
-    private fun releaseLocks() {
-        wifiLocks.forEach { if (it.isHeld) it.release() }
-        wifiLocks.clear()
-        wakeLock?.let { if (it.isHeld) it.release() }
-        wakeLock = null
     }
 
     private fun hasRecordPermission() =

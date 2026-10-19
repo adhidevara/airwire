@@ -1,4 +1,8 @@
-"""UDP listener: discovery replies, sender locking, audio intake, PING/PONG."""
+"""UDP listener: discovery replies, sender locking, audio intake, PING/PONG.
+
+Packets from phones that listen to this PC (LISTEN, their PING and BYE) go to the
+broadcaster, which sends the PC's audio from this same socket.
+"""
 
 from __future__ import annotations
 
@@ -8,11 +12,14 @@ import socket
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from . import protocol as proto
 from .jitter_buffer import JitterBuffer
 from .stats import NetStats
+
+if TYPE_CHECKING:
+    from .broadcast import PcAudioBroadcaster
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +58,7 @@ class ReceiverServer:
         self.invalid_packets = 0
         self.foreign_packets = 0
         self._sender: SenderInfo | None = None
+        self.broadcaster: PcAudioBroadcaster | None = None
         self._lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
@@ -98,7 +106,7 @@ class ReceiverServer:
                 self._tick(now)
                 next_tick = now + self.PING_INTERVAL_S
 
-    def _send(self, packet: proto.Packet, addr: tuple[str, int]) -> None:
+    def send(self, packet: proto.Packet, addr: tuple[str, int]) -> None:
         try:
             self.sock.sendto(proto.encode(packet), addr)
         except OSError as exc:
@@ -129,7 +137,7 @@ class ReceiverServer:
                     sender.capture_ms = pkt.capture_ms
                 self.stats.frame_ms = pkt.frame_ms
             case proto.Discover(nonce):
-                self._send(proto.Offer(nonce, self.port, self.name), addr)
+                self.send(proto.Offer(nonce, self.port, self.name), addr)
             case proto.Pong(t_ns):
                 if self._is_sender(addr):
                     self.stats.on_pong(t_ns)
@@ -137,6 +145,16 @@ class ReceiverServer:
                 if self._is_sender(addr):
                     log.info("sender %s said bye", addr)
                     self._disconnect()
+                elif self.broadcaster:
+                    self.broadcaster.handle_bye(pkt, addr)
+            case proto.Listen():
+                if self.broadcaster:
+                    self.broadcaster.handle_listen(pkt, addr)
+                else:
+                    self.send(proto.Refuse(pkt.session, proto.REFUSE_DISABLED), addr)
+            case proto.Ping():
+                if self.broadcaster:
+                    self.broadcaster.handle_ping(pkt, addr)
 
     def _is_sender(self, addr: tuple[str, int]) -> bool:
         with self._lock:
@@ -168,6 +186,8 @@ class ReceiverServer:
         self.stats.reset()
 
     def _tick(self, now: float) -> None:
+        if self.broadcaster:
+            self.broadcaster.tick()
         with self._lock:
             sender = self._sender
             timed_out = sender is not None and now - sender.last_seen > self.TIMEOUT_S
@@ -184,4 +204,4 @@ class ReceiverServer:
             jitter_us=round(self.stats.jitter_ms * 1000),
             buffer_ms=round(self.jitter.buffer_ms),
         )
-        self._send(ping, sender.addr)
+        self.send(ping, sender.addr)

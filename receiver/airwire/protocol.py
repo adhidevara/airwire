@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import struct
 from dataclasses import dataclass
 
@@ -17,9 +19,20 @@ T_OFFER = 0x11
 T_PING = 0x20
 T_PONG = 0x21
 T_BYE = 0x30
+T_LISTEN = 0x40
+T_REFUSE = 0x41
 
 SOURCE_INTERNAL = 0
 SOURCE_MIC = 1
+SOURCE_PC = 2
+
+# REFUSE reasons
+REFUSE_NOT_PAIRED = 1
+REFUSE_DISABLED = 2
+REFUSE_NO_CAPTURE = 3
+REFUSE_STOPPED = 4
+
+LISTEN_MAC_BYTES = 16
 
 FLAG_REDUNDANT = 0x01
 
@@ -31,6 +44,9 @@ _OFFER = struct.Struct(">IH")
 _PING = struct.Struct(">QHIH")
 _PONG = struct.Struct(">Q")
 _BYE = struct.Struct(">H")
+_LISTEN_FIELDS = struct.Struct(">HHQ")
+_LISTEN = struct.Struct(f">HHQ{LISTEN_MAC_BYTES}s")
+_REFUSE = struct.Struct(">HB")
 
 
 @dataclass(frozen=True)
@@ -83,7 +99,33 @@ class Bye:
     session: int
 
 
-Packet = Audio | Hello | Discover | Offer | Ping | Pong | Bye
+@dataclass(frozen=True)
+class Listen:
+    """Phone -> PC: stream this PC's audio to me. Sent every second while listening."""
+    session: int
+    bitrate_kbps: int
+    counter: int          # strictly increasing per phone; replays are ignored
+    mac: bytes            # listen_mac() under the phone's pairing key
+    name: str
+
+
+@dataclass(frozen=True)
+class Refuse:
+    """PC -> phone: LISTEN rejected (see REFUSE_*)."""
+    session: int
+    reason: int
+
+
+Packet = Audio | Hello | Discover | Offer | Ping | Pong | Bye | Listen | Refuse
+
+
+def listen_mac(key: bytes, session: int, bitrate_kbps: int, counter: int) -> bytes:
+    """HMAC-SHA256 over the header and fixed LISTEN fields, truncated to 16 bytes.
+
+    `key` is SHA-256 of the file-transfer pairing token, which the PC already stores.
+    """
+    msg = _header(T_LISTEN) + _LISTEN_FIELDS.pack(session, bitrate_kbps, counter)
+    return hmac.new(key, msg, hashlib.sha256).digest()[:LISTEN_MAC_BYTES]
 
 
 def _header(ptype: int) -> bytes:
@@ -126,6 +168,10 @@ def encode(packet: Packet) -> bytes:
             return _header(T_PONG) + _PONG.pack(t_ns)
         case Bye(session):
             return _header(T_BYE) + _BYE.pack(session)
+        case Listen(session, bitrate, counter, mac, name):
+            return _header(T_LISTEN) + _LISTEN.pack(session, bitrate, counter, mac) + _encode_name(name)
+        case Refuse(session, reason):
+            return _header(T_REFUSE) + _REFUSE.pack(session, reason)
     raise TypeError(f"not a packet: {packet!r}")
 
 
@@ -162,6 +208,12 @@ def decode(data: bytes) -> Packet | None:
             return Pong(*_PONG.unpack_from(body))
         if ptype == T_BYE:
             return Bye(*_BYE.unpack_from(body))
+        if ptype == T_LISTEN:
+            session, bitrate, counter, mac = _LISTEN.unpack_from(body)
+            return Listen(session, bitrate, counter, mac,
+                          bytes(body[_LISTEN.size:]).decode("utf-8", "replace"))
+        if ptype == T_REFUSE:
+            return Refuse(*_REFUSE.unpack_from(body))
     except struct.error:
         return None
     return None

@@ -31,8 +31,10 @@ network.
   you can turn the phone down to zero (verified on HyperOS / Android 13).
 - **Built for lossy Wi-Fi.** Every packet also carries the previous frame. Lost frames are
   rebuilt from that copy first, then from Opus in-band FEC, then with packet-loss concealment.
-- **Adaptive jitter buffer.** It grows after an underrun, shrinks when the network is
-  stable, and compensates for clock drift between the phone and the sound card.
+- **Adaptive jitter buffer.** Every frame records how long it waited before it was
+  played. Latency is cut as soon as the last 10 s show it isn't needed, and held while
+  the Wi-Fi keeps stalling, so it stays low without glitching. It also compensates for
+  clock drift between the phone and the sound card.
 - **Auto-discovery.** Tap *Auto Scan* and pick your PC, or type its IP.
 - **Keeps streaming with the screen off.** Runs as a foreground service with a visible
   notification and a Stop button.
@@ -41,6 +43,9 @@ network.
 - **File transfer, both ways.** Send photos, videos, and documents from the phone to the
   PC (or *Share → Airwire* from any app), and push files from the PC to the phone. Pair
   once with a 6-digit code; transfers are checked with SHA-256.
+- **Play your PC on your phone, too.** Switch the app to *PC → Phone* and the phone plays
+  what the PC is playing, like wireless headphones. It uses the same pairing, and only
+  paired phones can ask for the PC's audio. Windows and Linux PCs.
 
 ## Screenshots
 
@@ -143,6 +148,17 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 3. **PC → phone:** in the receiver window click **Send files to phone…**. The phone
    downloads them while Airwire is open or streaming and saves them to `Download/Airwire`.
 
+### 5. Play the PC's audio on the phone
+
+1. Pair once in the **Files** tab (see above).
+2. In the **Audio** tab choose **PC → Phone** and tap **START LISTENING**.
+3. The receiver window shows which phones are listening under *Play this PC on your
+   phone*. **Stop** ends it; unticking the box turns the feature off.
+
+The PC captures its system audio with the `soundcard` package (WASAPI loopback on Windows,
+PulseAudio or PipeWire on Linux). macOS can't capture system audio without a virtual
+device such as BlackHole, so this direction isn't supported there yet.
+
 ## Latency
 
 | Stage | Typical |
@@ -150,13 +166,18 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | Capture and Opus look-ahead (phone) | ~16 ms |
 | Frame duration | 10 ms |
 | Wi-Fi, one way | 1–10 ms |
-| Jitter buffer (adaptive) | 10–40 ms |
+| Jitter buffer (adaptive) | 10–30 ms |
 | WASAPI shared-mode output | ~22 ms |
 
-Measured end to end on loopback: **42 ms**. On a real network the jitter buffer adapts to
-your Wi-Fi. A quiet 5 GHz network stays close to the loopback figure, while a busy 2.4 GHz
-network can push the buffer above 100 ms. For the lowest latency, use 5 GHz and wired
+Estimated end to end on loopback: **about 45 ms**, with a 20 ms buffer. On a real network
+the buffer follows your Wi-Fi: it keeps enough to ride out the stalls of the last 10 s and
+gives the rest back. A quiet 5 GHz network stays close to the loopback figure; a busy
+2.4 GHz network needs more. Packets are marked as real-time traffic (DSCP EF), which Wi-Fi
+routers with WMM send ahead of downloads. For the lowest latency, use 5 GHz and wired
 speakers or headphones (Bluetooth adds 100–200 ms on its own).
+
+`tools/fake_sender.py --chunk 2 --stall 60 --stall-every 4` reproduces a bursty phone and
+a stalling network on one PC.
 
 ## Test without a phone
 
@@ -167,7 +188,8 @@ cd receiver
 python tools/fake_sender.py --discover                 # find receivers
 python tools/fake_sender.py --loss 5 --jitter 15       # tone with 5% loss and 0-15 ms jitter
 python tools/fake_sender.py --wav song_48k.wav --burst 3
-python -m pytest                                       # 65 unit + integration tests
+python tools/fake_listener.py --host 127.0.0.1 --code 123456   # listen to this PC
+python -m pytest                                       # 79 unit + integration tests
 ```
 
 ## Project layout
@@ -191,6 +213,11 @@ Rerouting audio away from the speaker requires a system-only permission (`REMOTE
 
 **More than one phone?** The receiver locks onto one sender at a time. A second phone is
 accepted once the first one stops.
+
+**Can someone else on my Wi-Fi listen to my PC?** Not without pairing. A phone has to
+prove it holds a pairing token with every request (HMAC), and the receiver window lists
+every phone that is listening. The audio itself is not encrypted, like the rest of
+Airwire's traffic.
 
 **Is file transfer encrypted?** No. Files travel as plain HTTP on your local network, and
 only paired phones can send or receive them. Use it on networks you trust, not on public

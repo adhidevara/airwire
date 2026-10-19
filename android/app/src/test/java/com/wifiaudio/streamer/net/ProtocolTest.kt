@@ -57,6 +57,44 @@ class ProtocolTest {
     }
 
     @Test
+    fun listenMatchesPython() {
+        val key = Protocol.pairingKey("test-token")
+        assertEquals("aa1b3c7b2972fc3e1494eb827bae358e", Protocol.listenMac(key, 0x1234, 96, 1_700_000_000_000).hex())
+        assertEquals(
+            "57410140123400600000018bcfe56800aa1b3c7b2972fc3e1494eb827bae358e506978656c",
+            Protocol.listen(key, 0x1234, 96, 1_700_000_000_000, "Pixel").hex(),
+        )
+    }
+
+    @Test
+    fun pingMatchesPython() {
+        assertEquals("574101200000001cbe991a14000f000008fc0014", Protocol.ping(123456789012, 15, 2300, 20).hex())
+    }
+
+    @Test
+    fun parsesAudio() {
+        val data = "574101011234fffffff0010002aabbcc".unhex()
+        val a = Protocol.parse(data, data.size) as Protocol.Audio
+        assertEquals(0x1234, a.session)
+        assertEquals(0xFFFFFFF0L, a.seq)
+        assertEquals("aabb", a.primary.hex())
+        assertEquals("cc", a.redundant!!.hex())
+    }
+
+    @Test
+    fun parsesHelloPongRefuse() {
+        val hello = "5741010200070000bb80020a00800200054d792d5043".unhex()
+        assertEquals(
+            Protocol.Hello(7, 48000, 2, 10, 128, Protocol.SOURCE_PC, 5, "My-PC"),
+            Protocol.parse(hello, hello.size),
+        )
+        val pong = "574101210000001cbe991a14".unhex()
+        assertEquals(Protocol.Pong(123456789012), Protocol.parse(pong, pong.size))
+        val refuse = "57410141000701".unhex()
+        assertEquals(Protocol.Refuse(7, Protocol.REFUSE_NOT_PAIRED), Protocol.parse(refuse, refuse.size))
+    }
+
+    @Test
     fun rejectsMalformed() {
         val ping = "574101200000001cbe991a14000f000008fc0014".unhex()
         assertNull(Protocol.parse(ping, 10)) // truncated

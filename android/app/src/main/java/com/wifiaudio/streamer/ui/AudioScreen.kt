@@ -33,6 +33,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,22 +50,30 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wifiaudio.streamer.AudioMode
 import com.wifiaudio.streamer.AudioSourceType
 import com.wifiaudio.streamer.StreamStats
 import com.wifiaudio.streamer.StreamStatus
 import com.wifiaudio.streamer.StreamViewModel
 import com.wifiaudio.streamer.UiState
 import com.wifiaudio.streamer.isActive
+import com.wifiaudio.streamer.listen.ListenStats
+import com.wifiaudio.streamer.listen.ListenStatus
+import com.wifiaudio.streamer.listen.isActive
 import com.wifiaudio.streamer.net.DiscoveredReceiver
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** The Audio tab: source, receiver address, start/stop and quality. */
+/** The Audio tab: direction, source, PC address, start/stop and quality. */
 @Composable
 fun AudioScreen(
     ui: UiState,
     status: StreamStatus,
     stats: StreamStats,
+    listenStatus: ListenStatus,
+    listenStats: ListenStats,
+    paired: Boolean,
+    onModeChange: (AudioMode) -> Unit,
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onSourceChange: (AudioSourceType) -> Unit,
@@ -71,8 +82,9 @@ fun AudioScreen(
     onPickReceiver: (DiscoveredReceiver) -> Unit,
     onDismissScan: () -> Unit,
     onToggle: () -> Unit,
+    onGoToFiles: () -> Unit,
 ) {
-    val active = status.isActive
+    val active = status.isActive || listenStatus.isActive
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -80,19 +92,124 @@ fun AudioScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        StatusCard(status, stats)
-        Section("Audio source") {
-            SourceSelector(ui.source, enabled = !active, onChange = onSourceChange)
+        ModeSelector(ui.mode, enabled = !active, onChange = onModeChange)
+        when (ui.mode) {
+            AudioMode.SEND -> {
+                StatusCard(status, stats)
+                Section("Audio source") {
+                    SourceSelector(ui.source, enabled = !active, onChange = onSourceChange)
+                }
+                Section("Receiver") {
+                    ConnectionPanel(ui, enabled = !active, onHostChange, onPortChange, onScan)
+                }
+                BigButton(if (active) "STOP STREAMING" else "START STREAMING", active, onToggle)
+            }
+            AudioMode.LISTEN -> {
+                ListenStatusCard(listenStatus, listenStats)
+                if (!paired) PairFirstCard(onGoToFiles)
+                Section("PC") {
+                    ConnectionPanel(ui, enabled = !active, onHostChange, onPortChange, onScan)
+                }
+                BigButton(if (active) "STOP LISTENING" else "START LISTENING", active, onToggle)
+            }
         }
-        Section("Receiver") {
-            ConnectionPanel(ui, enabled = !active, onHostChange, onPortChange, onScan)
-        }
-        StreamButton(active, onToggle)
         Section("Quality") {
             BitrateSlider(ui.bitrateKbps, onBitrateChange)
         }
     }
     ui.found?.let { ScanResultsDialog(it, ui.port, onPickReceiver, onDismissScan) }
+}
+
+@Composable
+private fun ModeSelector(mode: AudioMode, enabled: Boolean, onChange: (AudioMode) -> Unit) {
+    val options = listOf(AudioMode.SEND to "Phone → PC", AudioMode.LISTEN to "PC → Phone")
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { i, (value, label) ->
+            SegmentedButton(
+                selected = mode == value,
+                onClick = { onChange(value) },
+                enabled = enabled,
+                shape = SegmentedButtonDefaults.itemShape(i, options.size),
+                label = { Text(label) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListenStatusCard(status: ListenStatus, stats: ListenStats) {
+    val scheme = MaterialTheme.colorScheme
+    val (title, dot) = when (status) {
+        ListenStatus.Idle -> "Not playing" to scheme.outline
+        is ListenStatus.Connecting -> "Connecting…" to scheme.tertiary
+        is ListenStatus.Playing ->
+            (if (stats.receiving) "Playing PC audio" else "Waiting for audio") to scheme.primary
+        is ListenStatus.Failed -> "Error" to scheme.error
+    }
+    val container = if (status is ListenStatus.Playing) scheme.primaryContainer else scheme.surfaceContainerHigh
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = container)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(dot),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            }
+            when (status) {
+                ListenStatus.Idle -> Text(
+                    "Play what your PC is playing on this phone, like wireless headphones.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                is ListenStatus.Connecting -> Text(
+                    "Asking ${status.target} for its audio. The Airwire receiver on the PC must be " +
+                        "v0.3 or newer.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                is ListenStatus.Playing -> {
+                    Text("${status.pcName} · ${status.target}", style = MaterialTheme.typography.bodyMedium)
+                    Text(listenLine(stats), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "${stats.packets} packets · ${stats.kbps} kbps · ${stats.concealed} concealed",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                is ListenStatus.Failed -> Text(
+                    status.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.error,
+                )
+            }
+        }
+    }
+}
+
+private fun listenLine(stats: ListenStats): String {
+    val latency = stats.latencyMs?.let { "~$it ms latency · " }.orEmpty()
+    return String.format(
+        Locale.US, "%s%d ms buffer · %.1f%% loss · %.1f ms jitter",
+        latency, stats.bufferMs, stats.lossPercent, stats.jitterMs,
+    )
+}
+
+@Composable
+private fun PairFirstCard(onGoToFiles: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Pair with your PC first. Pairing once in the Files tab lets this phone both " +
+                    "transfer files and play the PC's audio.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedButton(onClick = onGoToFiles) { Text("Pair in Files") }
+        }
+    }
 }
 
 @Composable
@@ -258,7 +375,7 @@ private fun ConnectionPanel(
 }
 
 @Composable
-private fun StreamButton(active: Boolean, onToggle: () -> Unit) {
+private fun BigButton(label: String, active: Boolean, onToggle: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Button(
         onClick = onToggle,
@@ -273,7 +390,7 @@ private fun StreamButton(active: Boolean, onToggle: () -> Unit) {
         },
     ) {
         Text(
-            if (active) "STOP STREAMING" else "START STREAMING",
+            label,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp,

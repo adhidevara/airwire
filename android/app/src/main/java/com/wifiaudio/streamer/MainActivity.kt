@@ -26,6 +26,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wifiaudio.streamer.files.FileTransfer
 import com.wifiaudio.streamer.files.FileTransfers
 import com.wifiaudio.streamer.files.PairState
+import com.wifiaudio.streamer.listen.ListenController
+import com.wifiaudio.streamer.listen.ListenService
+import com.wifiaudio.streamer.listen.isActive
 import com.wifiaudio.streamer.net.Protocol
 import com.wifiaudio.streamer.service.StreamingService
 import com.wifiaudio.streamer.ui.AirwireApp
@@ -80,6 +83,9 @@ class MainActivity : ComponentActivity() {
                 val tab by vm.tab.collectAsStateWithLifecycle()
                 val status by StreamController.status.collectAsStateWithLifecycle()
                 val stats by StreamController.stats.collectAsStateWithLifecycle()
+                val listenStatus by ListenController.status.collectAsStateWithLifecycle()
+                val listenStats by ListenController.stats.collectAsStateWithLifecycle()
+                val pairing by vm.pairing.collectAsStateWithLifecycle()
                 val pairState by FileTransfers.pairState.collectAsStateWithLifecycle()
                 val transfers by FileTransfers.transfers.collectAsStateWithLifecycle()
                 val snackbar = remember { SnackbarHostState() }
@@ -107,6 +113,10 @@ class MainActivity : ComponentActivity() {
                             ui = ui,
                             status = status,
                             stats = stats,
+                            listenStatus = listenStatus,
+                            listenStats = listenStats,
+                            paired = pairing != null,
+                            onModeChange = vm::setMode,
                             onHostChange = vm::setHost,
                             onPortChange = vm::setPort,
                             onSourceChange = vm::setSource,
@@ -115,6 +125,7 @@ class MainActivity : ComponentActivity() {
                             onPickReceiver = vm::pickReceiver,
                             onDismissScan = vm::dismissScan,
                             onToggle = ::onToggle,
+                            onGoToFiles = { vm.selectTab(AppTab.FILES) },
                         )
                     },
                     files = {
@@ -201,6 +212,14 @@ class MainActivity : ComponentActivity() {
     // ---- audio ------------------------------------------------------------------
 
     private fun onToggle() {
+        if (vm.ui.value.mode == AudioMode.LISTEN) {
+            onToggleListen()
+            return
+        }
+        if (ListenController.status.value.isActive) {
+            vm.showMessage("Stop listening to the PC first.")
+            return
+        }
         if (StreamController.status.value.isActive) {
             StreamingService.stop(this)
             return
@@ -211,6 +230,30 @@ class MainActivity : ComponentActivity() {
         }
         val missing = requiredPermissions().filterNot(::hasPermission)
         if (missing.isEmpty()) requestCaptureAndStart() else permissionLauncher.launch(missing.toTypedArray())
+    }
+
+    /** PC -> phone. Needs the file-transfer pairing, which authenticates the request. */
+    private fun onToggleListen() {
+        if (ListenController.status.value.isActive) {
+            ListenService.stop(this)
+            return
+        }
+        if (StreamController.status.value.isActive) {
+            vm.showMessage("Stop streaming to the PC first.")
+            return
+        }
+        vm.validationError()?.let {
+            vm.showMessage(it)
+            return
+        }
+        val token = vm.pairing.value?.token
+        if (token == null) {
+            vm.showMessage("Pair with your PC in the Files tab first.")
+            return
+        }
+        askForNotifications()
+        val s = vm.ui.value
+        ListenService.start(this, s.host, s.port.toIntOrNull() ?: Protocol.DEFAULT_PORT, token)
     }
 
     private fun requiredPermissions(): List<String> = buildList {

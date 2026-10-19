@@ -2,4 +2,6 @@ numpy>=1.26
 sounddevice>=0.5
 # Ships opus.dll on Windows; only the DLL is used (see airwire/opus.py).
 pyogg==0.6.14a1; sys_platform == 'win32'
+# System audio loopback for PC -> phone (WASAPI on Windows, PulseAudio/PipeWire on Linux).
+soundcard>=0.4.6; sys_platform != 'darwin'
 pytest>=8

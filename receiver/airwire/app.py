@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import protocol as proto
+from .broadcast import ListenerInfo, PcAudioBroadcaster
 from .files import FileService, Pairing, default_files_dir
 from .jitter_buffer import JitterBuffer
 from .net import ReceiverServer
@@ -32,6 +33,7 @@ class Settings:
     device_name: str = ""
     files_dir: str = ""
     pair_code: str = ""
+    allow_listen: bool = True   # paired phones may play this PC's audio
     # sha256(token) -> {"device", "paired_at"}; see files.Pairing
     paired_devices: dict = field(default_factory=dict)
 
@@ -89,6 +91,9 @@ class Status:
     output_device: str = ""
     output_error: str | None = None
     local_ips: list[str] = field(default_factory=list)
+    listeners: list[ListenerInfo] = field(default_factory=list)
+    allow_listen: bool = True
+    capture_error: str | None = None
 
 
 def local_ipv4_addresses() -> list[str]:
@@ -138,7 +143,18 @@ class ReceiverApp:
             except OSError:
                 self.server.stop()
                 raise
+        self.broadcast = PcAudioBroadcaster(
+            self.files.pairing if self.files else None, self.server.send,
+            name=self.server.name, enabled=self.settings.allow_listen)
+        self.server.broadcaster = self.broadcast
         self._local_ips = local_ipv4_addresses()
+
+    def set_allow_listen(self, allow: bool) -> None:
+        self.settings.allow_listen = self.broadcast.enabled = allow
+        if not allow:
+            self.broadcast.stop_all()
+        if self._persist:
+            self.settings.save()
 
     def _pairing_changed(self, pairing: Pairing) -> None:
         self.settings.pair_code = pairing.code
@@ -153,6 +169,7 @@ class ReceiverApp:
         self.player.start(device)
 
     def stop(self) -> None:
+        self.broadcast.close()
         self.player.stop()
         if self.files:
             self.files.stop()
@@ -182,6 +199,9 @@ class ReceiverApp:
             recovered=jb.stats.recovered,
             concealed=jb.stats.fec + jb.stats.concealed,
             local_ips=self._local_ips,
+            listeners=self.broadcast.listeners(),
+            allow_listen=self.broadcast.enabled,
+            capture_error=self.broadcast.capture_error,
         )
         if sender is None:
             return status

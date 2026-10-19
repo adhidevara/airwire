@@ -142,6 +142,20 @@ class ReceiverWindow:
         self.output_note.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
         self._on_volume(settings.volume)
 
+        # PC audio -> phone --------------------------------------------------------
+        listen = ttk.LabelFrame(body, text="Play this PC on your phone", padding=(10, 6))
+        listen.grid(row=5, column=0, sticky="ew", pady=(10, 0))
+        listen.columnconfigure(0, weight=1)
+        self.allow_listen_var = tk.BooleanVar(value=settings.allow_listen)
+        ttk.Checkbutton(listen, text="Let paired phones play what this PC is playing",
+                        variable=self.allow_listen_var, command=self._on_allow_listen).grid(
+            row=0, column=0, columnspan=2, sticky="w")
+        self.listeners_label = ttk.Label(listen, style="Value.TLabel", wraplength=360,
+                                         justify="left")
+        self.listeners_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self.stop_listen_btn = ttk.Button(listen, text="Stop", command=self.app.broadcast.stop_all)
+        self.stop_listen_btn.grid(row=1, column=1, sticky="e", padx=(8, 0), pady=(4, 0))
+
         # Files (right column) -----------------------------------------------------
         body.columnconfigure(1, weight=1)
         self._build_files_panel(body)
@@ -154,7 +168,7 @@ class ReceiverWindow:
 
     def _build_files_panel(self, body: ttk.Frame) -> None:
         panel = ttk.LabelFrame(body, text="Files", padding=(10, 6))
-        panel.grid(row=1, column=1, rowspan=4, sticky="nsew", padx=(12, 0))
+        panel.grid(row=1, column=1, rowspan=5, sticky="nsew", padx=(12, 0))
         panel.columnconfigure(0, weight=1)
         panel.rowconfigure(4, weight=1)
         self._transfers: dict[str, Transfer] = {}
@@ -201,8 +215,9 @@ class ReceiverWindow:
             row=5, column=0, sticky="w", pady=(6, 0))
 
     def _reset_pairing(self) -> None:
-        if messagebox.askyesno("Reset pairing", "Paired phones will need the new code to send "
-                                                "or receive files. Reset now?", parent=self.root):
+        if messagebox.askyesno("Reset pairing", "Paired phones will need the new code to "
+                                                "transfer files or play this PC's audio. "
+                                                "Reset now?", parent=self.root):
             self.app.files.pairing.reset()
 
     def _send_files(self) -> None:
@@ -265,6 +280,9 @@ class ReceiverWindow:
         self.settings.volume = pct
         self.volume_text.set(f"{pct} %")
 
+    def _on_allow_listen(self) -> None:
+        self.app.set_allow_listen(self.allow_listen_var.get())
+
     def _refresh(self) -> None:
         self._render(self.app.status())
         self._render_files()
@@ -305,6 +323,22 @@ class ReceiverWindow:
         else:
             self.output_note.configure(text=f"Output latency {s.output_latency_ms:.0f} ms",
                                        foreground=GREY)
+
+        if s.listeners:
+            lines = [f"▶ {l.device}  ·  {l.bitrate_kbps} kbps  ·  loss "
+                     f"{l.loss_permille / 10:.1f} %  ·  buffer {l.buffer_ms} ms"
+                     for l in s.listeners]
+            self.listeners_label.configure(text="\n".join(lines), foreground=GREEN)
+            self.stop_listen_btn.state(["!disabled"])
+        else:
+            if s.capture_error:
+                text, color = f"Can't capture this PC's audio: {s.capture_error}", RED
+            elif s.allow_listen:
+                text, color = "No phone is listening. In the app choose PC → Phone.", GREY
+            else:
+                text, color = "Off.", GREY
+            self.listeners_label.configure(text=text, foreground=color)
+            self.stop_listen_btn.state(["disabled"])
 
     def close(self) -> None:
         self.settings.save()

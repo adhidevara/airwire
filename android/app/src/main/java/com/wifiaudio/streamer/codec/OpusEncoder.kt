@@ -28,6 +28,26 @@ object OpusNative {
 
     @JvmStatic
     external fun destroy(handle: Long)
+
+    @JvmStatic
+    external fun decoderCreate(sampleRate: Int, channels: Int): Long
+
+    /** [data] null = packet-loss concealment; [fec] decodes the FEC copy carried in [data]. */
+    @JvmStatic
+    external fun decode(
+        handle: Long,
+        data: ByteArray?,
+        len: Int,
+        pcm: ShortArray,
+        frameSize: Int,
+        fec: Boolean,
+    ): Int
+
+    @JvmStatic
+    external fun decoderReset(handle: Long): Int
+
+    @JvmStatic
+    external fun decoderDestroy(handle: Long)
 }
 
 /**

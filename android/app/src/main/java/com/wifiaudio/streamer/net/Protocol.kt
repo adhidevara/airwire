@@ -2,6 +2,9 @@ package com.wifiaudio.streamer.net
 
 import java.nio.BufferUnderflowException
 import java.nio.ByteBuffer
+import java.security.MessageDigest
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 /** Wire format shared with the laptop receiver. Source of truth: PROTOCOL.md. */
 object Protocol {
@@ -15,9 +18,20 @@ object Protocol {
     const val T_PING = 0x20
     const val T_PONG = 0x21
     const val T_BYE = 0x30
+    const val T_LISTEN = 0x40
+    const val T_REFUSE = 0x41
 
     const val SOURCE_INTERNAL = 0
     const val SOURCE_MIC = 1
+    const val SOURCE_PC = 2
+
+    // REFUSE reasons
+    const val REFUSE_NOT_PAIRED = 1
+    const val REFUSE_DISABLED = 2
+    const val REFUSE_NO_CAPTURE = 3
+    const val REFUSE_STOPPED = 4
+
+    const val LISTEN_MAC_BYTES = 16
 
     const val FLAG_REDUNDANT = 0x01
     const val HEADER_BYTES = 4
@@ -30,6 +44,22 @@ object Protocol {
     sealed interface Incoming
     data class Offer(val nonce: Int, val audioPort: Int, val name: String) : Incoming
     data class Ping(val tNs: Long, val lossPermille: Int, val jitterUs: Long, val bufferMs: Int) : Incoming
+    data class Pong(val tNs: Long) : Incoming
+    data class Refuse(val session: Int, val reason: Int) : Incoming
+
+    /** [primary] and [redundant] are copies; [seq] is unsigned 32-bit. */
+    class Audio(val session: Int, val seq: Long, val primary: ByteArray, val redundant: ByteArray?) : Incoming
+
+    data class Hello(
+        val session: Int,
+        val sampleRate: Int,
+        val channels: Int,
+        val frameMs: Int,
+        val bitrateKbps: Int,
+        val source: Int,
+        val captureMs: Int,
+        val name: String,
+    ) : Incoming
 
     private fun ByteBuffer.putHeader(type: Int): ByteBuffer = apply {
         put('W'.code.toByte())
@@ -92,7 +122,43 @@ object Protocol {
     fun bye(session: Int): ByteArray =
         ByteBuffer.allocate(HEADER_BYTES + 2).putHeader(T_BYE).putShort(session.toShort()).array()
 
-    /** Parses the packets a sender receives (OFFER, PING); anything else is null. */
+    fun ping(tNs: Long, lossPermille: Int, jitterUs: Long, bufferMs: Int): ByteArray =
+        ByteBuffer.allocate(HEADER_BYTES + 16).putHeader(T_PING)
+            .putLong(tNs)
+            .putShort(lossPermille.coerceIn(0, 1000).toShort())
+            .putInt(jitterUs.coerceIn(0, 0xFFFFFFFFL).toInt())
+            .putShort(bufferMs.coerceIn(0, 0xFFFF).toShort())
+            .array()
+
+    /** Key for [listen]: SHA-256 of the file-transfer pairing token, which the PC also keeps. */
+    fun pairingKey(token: String): ByteArray =
+        MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8))
+
+    /** HMAC-SHA256 over the header and fixed LISTEN fields, truncated to 16 bytes. */
+    fun listenMac(key: ByteArray, session: Int, bitrateKbps: Int, counter: Long): ByteArray {
+        val fields = ByteBuffer.allocate(HEADER_BYTES + 12).putHeader(T_LISTEN)
+            .putShort(session.toShort())
+            .putShort(bitrateKbps.toShort())
+            .putLong(counter)
+            .array()
+        val mac = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(key, "HmacSHA256")) }
+        return mac.doFinal(fields).copyOf(LISTEN_MAC_BYTES)
+    }
+
+    /** Asks the PC to stream its audio here; [counter] must grow with every packet. */
+    fun listen(key: ByteArray, session: Int, bitrateKbps: Int, counter: Long, name: String): ByteArray {
+        val nameBytes = encodeName(name)
+        return ByteBuffer.allocate(HEADER_BYTES + 12 + LISTEN_MAC_BYTES + nameBytes.size)
+            .putHeader(T_LISTEN)
+            .putShort(session.toShort())
+            .putShort(bitrateKbps.toShort())
+            .putLong(counter)
+            .put(listenMac(key, session, bitrateKbps, counter))
+            .put(nameBytes)
+            .array()
+    }
+
+    /** Parses OFFER and PING (sending) and AUDIO, HELLO, PONG, REFUSE (listening). */
     fun parse(data: ByteArray, length: Int): Incoming? {
         if (length < HEADER_BYTES || length > data.size) return null
         if (data[0] != 'W'.code.toByte() || data[1] != 'A'.code.toByte()) return null
@@ -111,6 +177,34 @@ object Protocol {
                     lossPermille = buf.short.toInt() and 0xFFFF,
                     jitterUs = buf.int.toLong() and 0xFFFFFFFFL,
                     bufferMs = buf.short.toInt() and 0xFFFF,
+                )
+                T_PONG -> Pong(buf.long)
+                T_REFUSE -> Refuse(buf.short.toInt() and 0xFFFF, buf.get().toInt() and 0xFF)
+                T_AUDIO -> {
+                    val session = buf.short.toInt() and 0xFFFF
+                    val seq = buf.int.toLong() and 0xFFFFFFFFL
+                    val flags = buf.get().toInt()
+                    val primaryLen = buf.short.toInt() and 0xFFFF
+                    val start = buf.position()
+                    if (primaryLen == 0 || start + primaryLen > length) return null
+                    val primary = data.copyOfRange(start, start + primaryLen)
+                    val rest = start + primaryLen
+                    val redundant = if (flags and FLAG_REDUNDANT != 0 && rest < length) {
+                        data.copyOfRange(rest, length)
+                    } else {
+                        null
+                    }
+                    Audio(session, seq, primary, redundant)
+                }
+                T_HELLO -> Hello(
+                    session = buf.short.toInt() and 0xFFFF,
+                    sampleRate = buf.int,
+                    channels = buf.get().toInt() and 0xFF,
+                    frameMs = buf.get().toInt() and 0xFF,
+                    bitrateKbps = buf.short.toInt() and 0xFFFF,
+                    source = buf.get().toInt() and 0xFF,
+                    captureMs = buf.short.toInt() and 0xFFFF,
+                    name = String(data, buf.position(), length - buf.position(), Charsets.UTF_8),
                 )
                 else -> null
             }
